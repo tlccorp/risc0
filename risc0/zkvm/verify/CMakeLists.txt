@@ -4,8 +4,9 @@ add_library(zkvm-verify
 )
 
 
-add_custom_command(OUTPUT step.cpp.inc COMMAND make-circuit ${CMAKE_BINARY_DIR}/step.cpp.inc  DEPENDS make-circuit VERBATIM) 
-add_custom_target(step.cpp.inc ALL )
-add_dependencies(zkvm-verify step.cpp.inc)
+add_custom_command(OUTPUT step.cpp.inc COMMAND ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/make-circuit ${CMAKE_BINARY_DIR}/risc0/zkvm/circuit/step.cpp.inc  VERBATIM) 
+add_custom_target(step.inc ALL DEPENDS step.cpp.inc)
+add_dependencies(step.inc make-circuit)
+add_dependencies(zkvm-verify step.inc)
 
 
