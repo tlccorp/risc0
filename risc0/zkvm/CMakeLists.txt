@@ -1,3 +1,5 @@
-add_subdirectory(verify)
 add_subdirectory(sdk)
 add_subdirectory(circuit)
+add_subdirectory(verify)
+#add_subdirectory(prove)
+add_subdirectory(r0vm)

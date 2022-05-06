@@ -1,4 +1,4 @@
-add_library(sdk-guest
+add_library(zkvm-sdk-cpp-guest
         cppstd.cpp 
 	env.cpp    
 	fail.cpp   

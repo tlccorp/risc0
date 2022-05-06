@@ -1,0 +1,8 @@
+add_library(zkvm-prove
+	exec.cpp		
+	io_handler.cpp		
+	method_id.cpp		
+	riscv.cpp		
+	step.cpp		
+	step_context.cpp
+)
