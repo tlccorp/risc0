@@ -1,11 +1,12 @@
 set (CMAKE_CXX_FLAGS "-m32 ")
+
 add_library(zkvm-sdk-cpp-guest
-        cppstd.cpp 
+        #cppstd.cpp 
 	#env.cpp    
 	#fail.cpp   
 	key.cpp    
 	prng.cpp   
-	sha.cpp    
+	#sha.cpp    
 	stdlib.cpp 
 	string.cpp
 )

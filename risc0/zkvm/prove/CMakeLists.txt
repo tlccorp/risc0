@@ -6,3 +6,4 @@ add_library(zkvm-prove
 	step.cpp		
 	step_context.cpp
 )
+add_subdirectory(make-id)

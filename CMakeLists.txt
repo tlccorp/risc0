@@ -17,6 +17,6 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-include_directories(${risc0_SOURCE_DIR} ${CMAKE_BINARY_DIR}  /usr/local/Cellar/tbb/2021.5.0_1/include)
+include_directories(${risc0_SOURCE_DIR} ${CMAKE_BINARY_DIR}  /opt/homebrew/Cellar/tbb/2021.5.0_1/include)
 add_subdirectory(risc0)
 add_subdirectory(examples)
