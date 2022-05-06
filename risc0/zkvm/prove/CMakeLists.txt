@@ -6,4 +6,6 @@ add_library(zkvm-prove
 	step.cpp		
 	step_context.cpp
 )
+target_link_libraries(zkvm-prove  TBB::tbb)
+
 add_subdirectory(make-id)
