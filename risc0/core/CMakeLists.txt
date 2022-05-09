@@ -13,10 +13,13 @@ if (LINUX)
 endif (LINUX)
 
 
+set (CPU_SOURCES elf.cpp  rng.cpp)
+if(BUILD_EOS)
+  set (CPU_SOURCES )
+endif()
 
 add_library(core 
 	log.cpp  
-	elf.cpp  
-	rng.cpp  
+	${CPU_SOURCES}
         ${PLATFORM_RNG}
 )
