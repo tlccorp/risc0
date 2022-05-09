@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::{vec, vec::Vec};
+use core::fmt;
+
 use risc0_zkp_core::{
     fp::Fp,
     fp4::{Fp4, EXT_SIZE},
@@ -31,16 +34,31 @@ use crate::{
 const MAX_CYCLES_PO2: usize = 20;
 const CHECK_SIZE: usize = INV_RATE * EXT_SIZE;
 
+#[derive(Debug)]
+pub enum VerificationError {
+    ReceiptFormatError,
+    MethodVerificationError,
+}
+
+impl fmt::Display for VerificationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            VerificationError::ReceiptFormatError => write!(f, "invalid receipt format"),
+            VerificationError::MethodVerificationError => write!(f, "method verification failed"),
+        }
+    }
+}
+
 pub trait Circuit {
-    fn taps(&self) -> &'static Taps;
+    fn taps(&self) -> &'static Taps<'static>;
     fn execute(&mut self, iop: &mut ReadIOP);
     fn accumulate(&mut self, iop: &mut ReadIOP);
     fn po2(&self) -> u32;
-    fn check_code(&self, root: &Digest);
+    fn check_code(&self, root: &Digest) -> Result<(), VerificationError>;
     fn compute_polynomial(&self, u: &[Fp4], mix: Fp4) -> Fp4;
 }
 
-pub fn verify(circuit: &mut dyn Circuit, proof: &[u32]) {
+pub fn verify(circuit: &mut dyn Circuit, proof: &[u32]) -> Result<(), VerificationError> {
     // Make IOP
     let mut iop = ReadIOP::new(proof);
 
@@ -78,7 +96,7 @@ pub fn verify(circuit: &mut dyn Circuit, proof: &[u32]) {
     let data_merkle = MerkleTreeVerifier::new(&mut iop, domain, data_size, QUERIES);
 
     // Verify code is valid
-    circuit.check_code(code_merkle.root());
+    circuit.check_code(code_merkle.root())?;
 
     // Prep accumulation
     circuit.accumulate(&mut iop);
@@ -102,9 +120,9 @@ pub fn verify(circuit: &mut dyn Circuit, proof: &[u32]) {
     let back_one: Fp = Fp::from(ROU_REV[po2 as usize]);
     let mut cur_pos: usize = 0;
     let mut eval_u: Vec<Fp4> = vec![];
-    for reg in &taps.registers {
+    for reg in taps.registers {
         let blen = reg.back.len();
-        for b in &reg.back {
+        for b in reg.back {
             let x = back_one.pow(*b) * z;
             let fx = poly_eval(&coeff_u[cur_pos..(cur_pos + blen)], x);
             eval_u.push(fx);
@@ -141,7 +159,7 @@ pub fn verify(circuit: &mut dyn Circuit, proof: &[u32]) {
     }
     let mut cur_mix = Fp4::one();
     cur_pos = 0;
-    for reg in &taps.registers {
+    for reg in taps.registers {
         let blen = reg.back.len();
         for i in 0..blen {
             combo_u[reg.combo_id][i] += cur_mix * coeff_u[cur_pos + i];
@@ -171,7 +189,7 @@ pub fn verify(circuit: &mut dyn Circuit, proof: &[u32]) {
             let check_row = check_merkle.verify(inner_iop, idx);
             let mut cur = Fp4::one();
             let mut tot = vec![Fp4::zero(); combos_size + 1];
-            for reg in &taps.registers {
+            for reg in taps.registers {
                 tot[reg.combo_id] += cur * rows[reg.group as usize][reg.offset];
                 cur *= mix;
             }
@@ -183,7 +201,7 @@ pub fn verify(circuit: &mut dyn Circuit, proof: &[u32]) {
             for i in 0..combos_size {
                 let num = tot[i] - poly_eval(&combo_u[i], x);
                 let mut divisor = Fp4::one();
-                for b in &taps.combos[i].back {
+                for b in taps.combos[i].back {
                     divisor *= x - z * back_one.pow(*b);
                 }
                 ret += num * divisor.inv();
@@ -195,4 +213,5 @@ pub fn verify(circuit: &mut dyn Circuit, proof: &[u32]) {
         },
     );
     iop.verify_complete();
+    Ok(())
 }

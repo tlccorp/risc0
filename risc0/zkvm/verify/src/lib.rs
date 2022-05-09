@@ -12,20 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![no_std]
+
+extern crate alloc;
+
 mod circuit;
-mod eval;
 mod poly_op;
 mod poly_ops;
 mod taps;
 
-use arrayref::array_ref;
+use alloc::{vec, vec::Vec};
 
 use serde::{Deserialize, Serialize};
 
 use risc0_zkp_core::sha::Digest;
 use risc0_zkp_verify::verify::verify;
 
-use crate::circuit::Risc0Circuit;
+use crate::circuit::{MethodID, Risc0Circuit};
 
 #[derive(Deserialize, Serialize)]
 pub struct Receipt {
@@ -34,9 +37,9 @@ pub struct Receipt {
 }
 
 impl Receipt {
-    pub fn verify(&self) {
-        let mut circuit = Risc0Circuit::default();
-        verify(&mut circuit, &self.seal);
+    pub fn verify(&self, method_id: MethodID) {
+        let mut circuit = Risc0Circuit::new(method_id);
+        verify(&mut circuit, &self.seal).unwrap();
         assert!(self.journal.len() == (self.seal[8] as usize));
         if self.journal.len() > 32 {
             let digest = Digest::hash_bytes(&self.journal);
@@ -45,7 +48,9 @@ impl Receipt {
             let mut vec = self.journal.clone();
             vec.resize(32, 0);
             for i in 0..8 {
-                assert!(self.seal[i] == u32::from_le_bytes(*array_ref![&vec, i * 4, 4]));
+                assert!(
+                    self.seal[i] == u32::from_le_bytes(vec[i * 4..i * 4 + 4].try_into().unwrap())
+                );
             }
         }
     }
@@ -54,7 +59,9 @@ impl Receipt {
         let mut as_words: Vec<u32> = vec![];
         assert!(self.journal.len() % 4 == 0);
         for i in 0..(self.journal.len() / 4) {
-            as_words.push(u32::from_le_bytes(*array_ref![&self.journal, i * 4, 4]));
+            as_words.push(u32::from_le_bytes(
+                self.journal[i * 4..i * 4 + 4].try_into().unwrap(),
+            ));
         }
         as_words
     }
@@ -62,11 +69,13 @@ impl Receipt {
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
     use super::Receipt;
-    use std::vec::Vec;
+    use crate::MethodID;
     use core::convert::TryFrom;
     use std::fs;
     use std::io;
+    use std::vec::Vec;
     use test_log::test;
 
     #[test]
@@ -79,10 +88,12 @@ mod tests {
             .collect();
         let receipt: Receipt = risc0_zkvm_serde::from_slice(&as_u32).unwrap();
 
+        let method_id = MethodID::try_from(fs::read("src/simple_receipt.id")?.as_slice()).unwrap();
+
         std::println!(
             "Receipt: journal length {} seal length {}",
             receipt.journal.len(),
-            receipt.seal.len()
+            receipt.seal.len(),
         );
 
         for i in 0..50 {
@@ -90,7 +101,7 @@ mod tests {
         }
         std::println!("\n");
 
-        receipt.verify();
+        receipt.verify(method_id);
         Ok(())
     }
 }
