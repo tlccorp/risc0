@@ -5,7 +5,37 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-find_package(TBB REQUIRED)
+
+set (BUILD_HOST_VERIFY ON)
+set (BUILD_RISCVM OFF)
+set (BUILD_METHODS OFF)
+
+
+
+if(BUILD_HOST_VERIFY)
+	message("Building host verifier")
+else()
+	message (WARNING,"Builds for host verifier are disabled")
+endif()
+
+if(BUILD_RISCVM)
+        message("Building risc VM")
+else()
+        message (WARNING,"Builds for risc VM are disabled")
+endif()
+
+if(BUILD_METHODS)
+        message("Building methods")
+else()
+        message (WARNING,"Builds for methods are disabled")
+endif()
+
+
+
+if(BUILD_RISCVM)
+	find_package(TBB REQUIRED)
+endif()
+
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
