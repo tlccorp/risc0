@@ -1,0 +1,5 @@
+[toolchain]
+# To install the risc0 toolchain:
+#   cargo +stable install --git https://github.com/risc0/risc0 cargo-risc0
+#   cargo +Stable risc0 install
+channel = "risc0"

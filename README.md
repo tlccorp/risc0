@@ -133,6 +133,21 @@ You should be able to build and run all tests with:
 bazelisk test //...
 ```
 
+## Building using Cargo
+
+To use Cargo, the Rust package manager, to build, first install the
+risc0 toolchain manager, and use it to install the risc0 toolchain:
+
+```
+cargo +stable install --git https://github.com/risc0/risc0 cargo-risc0
+cargo +stable risc0 install
+```
+
+(The "+stable" will force cargo to use the stable rust toolchain
+instead of the risc0 toolchain, which presumably isn't installed
+already.)
+
+
 ### Linux
 
 A C++ compiler must be installed; both gcc and clang should work.
