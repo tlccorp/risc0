@@ -9,15 +9,26 @@ members = [
   "risc0/zkvm/platform",
   "risc0/zkvm/prove/make-id",
   "risc0/zkvm/sdk/rust",
+  "risc0/zkvm/sdk/rust/methods",
+  "risc0/zkvm/sdk/rust/methods/inner",
 ]
 
 exclude = [
   "risc0/zkvm/sdk/rust/cargo-risc0",
-  "risc0/zkvm/sdk/rust/methods",
 ]
 
+# TODO(nils) Is there a way to only use opt_level="z" for building guest binaries?
 [profile.release]
 lto = true
+opt-level = "z"
+
+[profile.dev]
+lto = true
+opt-level = "z"
+
+[profile.test]
+lto = true
+opt-level = "z"
 
 [profile.bootstrap]
 inherits = "release"
