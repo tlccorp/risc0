@@ -11,6 +11,7 @@ members = [
   "risc0/zkvm/sdk/rust",
   "risc0/zkvm/sdk/rust/methods",
   "risc0/zkvm/sdk/rust/methods/inner",
+  "risc0/zkvm/sdk/rust/build",
 ]
 
 exclude = [

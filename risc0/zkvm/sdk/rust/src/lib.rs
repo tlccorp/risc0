@@ -13,20 +13,13 @@
 // limitations under the License.
 
 #![cfg_attr(not(feature = "std"), no_std)]
-#![cfg_attr(target_arch = "riscv32", feature(alloc_error_handler))]
-#![cfg_attr(target_arch = "riscv32", feature(new_uninit))]
 
 extern crate alloc;
 
 pub mod core;
-pub mod platform;
-pub mod serde;
-
-#[cfg(target_arch = "riscv32")]
-pub mod guest;
-
+#[cfg(feature = "prove")]
+pub mod elf;
 #[cfg(all(not(target_arch = "riscv32"), feature = "std"))]
 pub mod host;
-
-#[cfg(not(any(target_arch = "riscv32", feature = "bazel")))]
-pub mod build;
+pub mod platform;
+pub mod serde;

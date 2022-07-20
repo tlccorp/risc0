@@ -13,11 +13,11 @@
 // limitations under the License.
 
 #![no_main]
-#![cfg_attr(not(feature = "std"), no_std)]
-#![allow(non_snake_case)]
+use std::compile_error;
 
 risc0_zkvm_guest::entry!(main);
 
 pub fn main() {
-    panic!("Failure");
+    #[cfg(not(all(feature = "test_feature1", feature = "test_feature2")))]
+    compile_error!("Test feature was not found.");
 }
