@@ -17,7 +17,7 @@
 extern crate alloc;
 
 pub mod core;
-#[cfg(feature = "prove")]
+#[cfg(all(not(target_arch = "riscv32"), feature = "prove"))]
 pub mod elf;
 #[cfg(all(not(target_arch = "riscv32"), feature = "std"))]
 pub mod host;

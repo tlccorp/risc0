@@ -162,6 +162,7 @@ impl Receipt {
             let buf = ffi::check(err, || buf)?;
             let mut err = ffi::RawError::default();
             let len = ffi::risc0_receipt_get_journal_len(&mut err, self.ptr);
+            eprintln!("buf={:?} len={:?} err={:?}", buf, len, &err);
             let len = ffi::check(err, || len)?;
             Ok(std::slice::from_raw_parts(buf, len))
         }

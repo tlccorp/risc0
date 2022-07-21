@@ -177,6 +177,21 @@ fn guest_methods(pkg: &Package) -> Vec<Risc0Method> {
         .collect()
 }
 
+/// Options defining how to embed a guest package in
+/// [`embed_methods_with_options`].
+pub struct GuestOptions {
+    /// The number of po2 entries to generate in the MethodID.
+    pub code_limit: u32,
+}
+
+impl Default for GuestOptions {
+    fn default() -> Self {
+        GuestOptions {
+            code_limit: DEFAULT_METHOD_ID_LIMIT,
+        }
+    }
+}
+
 /// Embeds methods built for RISC-V for use by host-side dependencies.
 /// Specify custom options for a guest package by defining its [GuestOptions].
 /// See [embed_methods].
@@ -194,6 +209,10 @@ pub fn embed_methods_with_options(mut guest_pkg_to_options: HashMap<&str, GuestO
             "Building methods for guest package {}.{}",
             pkg.name, guest_pkg.name
         );
+
+        let guest_options = guest_pkg_to_options
+            .remove(guest_pkg.name.as_str())
+            .unwrap_or_default();
 
         for method in guest_methods(&guest_pkg) {
             methods_file
@@ -235,6 +254,7 @@ pub fn embed_methods() {
 
 /// Called inside the guest crate's build.rs to do special linking for the ZKVM
 pub fn link() {
+    eprintln!("Guest!  Adding link arg. {:?}", env::var("CARGO_CFG_TARGET_ARCH"));
     if env::var("CARGO_CFG_TARGET_ARCH").unwrap() == "riscv32" {
         let out_dir = env::var_os("OUT_DIR").unwrap();
         let linker_script = Path::new(&out_dir).join("risc0.ld");

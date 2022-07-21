@@ -1,12 +1,12 @@
-#![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(any(target_arch = "riscv32", not(feature = "std")), no_std)]
 
 extern crate alloc;
 
 pub mod core;
-#[cfg(feature = "hal")]
+#[cfg(all(feature = "hal", not(target_arch = "riscv32")))]
 pub mod hal;
 mod merkle;
-#[cfg(feature = "prove")]
+#[cfg(all(feature = "prove", not(target_arch = "riscv32")))]
 pub mod prove;
 pub mod taps;
 #[cfg(feature = "verify")]

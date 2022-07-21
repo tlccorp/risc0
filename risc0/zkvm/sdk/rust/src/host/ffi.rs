@@ -21,6 +21,7 @@ pub(crate) enum RawProver {}
 pub(crate) enum RawReceipt {}
 pub(crate) enum RawMethodId {}
 
+#[derive(Debug)]
 #[repr(C)]
 pub(crate) struct RawError {
     msg: *const RawString,
