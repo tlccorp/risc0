@@ -65,9 +65,7 @@ impl MemoryImage {
         for (addr, data) in program.image {
             let addr = addr as usize;
             let bytes = data.to_le_bytes();
-            for i in 0..WORD_SIZE {
-                image[addr + i] = bytes[i];
-            }
+            image[addr..(addr + WORD_SIZE)].copy_from_slice(&bytes[..WORD_SIZE]);
         }
 
         // TODO: load REG_PC

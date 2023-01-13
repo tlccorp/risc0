@@ -49,10 +49,12 @@ pub trait HostHandler {
     fn on_trace(&mut self, event: TraceEvent) -> Result<()>;
 }
 
+pub type BabyBearTup = (BabyBearElem, BabyBearElem, BabyBearElem, BabyBearElem);
+
 struct MemoryState {
     pub ram: BTreeMap<u32, u32>,
     // Ram in the FFPU section of memory; these RAM slots store four Fps instead of one u32.
-    pub ffpu_ram: Vec<(BabyBearElem, BabyBearElem, BabyBearElem, BabyBearElem)>,
+    pub ffpu_ram: Vec<BabyBearTup>,
 
     // Plonk tables for sorting plonks in proper order
     pub ram_plonk: plonk::RamPlonk,
@@ -128,8 +130,8 @@ impl MemoryState {
     #[track_caller]
     fn store_region(&mut self, addr: u32, slice: &[u8]) {
         trace!("store_region: 0x{addr:08X} <= {} bytes", slice.len());
-        for i in 0..slice.len() {
-            self.store_u8(addr + i as u32, slice[i]);
+        for (i, val) in slice.iter().enumerate() {
+            self.store_u8(addr + i as u32, *val);
         }
     }
 
@@ -334,13 +336,10 @@ impl<'a, H: HostHandler> MachineContext<'a, H> {
 
     fn divide(
         &self,
-        numer: (BabyBearElem, BabyBearElem, BabyBearElem, BabyBearElem),
-        denom: (BabyBearElem, BabyBearElem, BabyBearElem, BabyBearElem),
+        numer: BabyBearTup,
+        denom: BabyBearTup,
         sign: BabyBearElem,
-    ) -> (
-        (BabyBearElem, BabyBearElem, BabyBearElem, BabyBearElem),
-        (BabyBearElem, BabyBearElem, BabyBearElem, BabyBearElem),
-    ) {
+    ) -> (BabyBearTup, BabyBearTup) {
         let mut numer = merge_word8(numer) as i64;
         let mut denom = merge_word8(denom) as i64;
         let sign: u32 = sign.into();
@@ -424,7 +423,7 @@ impl<'a, H: HostHandler> MachineContext<'a, H> {
                 "u" => format!("{:width$}", next_arg()),
                 "x" => format!("{:0width$x}", next_arg()),
                 "d" => format!("{:width$}", next_arg() as i32),
-                "%" => format!("%"),
+                "%" => "%".to_string(),
                 "w" => {
                     let nexts = [next_arg(), next_arg(), next_arg(), next_arg()];
                     if nexts.iter().all(|v| *v <= 255) {
@@ -451,10 +450,7 @@ impl<'a, H: HostHandler> MachineContext<'a, H> {
         trace!("{}", formatted);
     }
 
-    fn ram_read(
-        &mut self,
-        addr: BabyBearElem,
-    ) -> (BabyBearElem, BabyBearElem, BabyBearElem, BabyBearElem) {
+    fn ram_read(&mut self, addr: BabyBearElem) -> BabyBearTup {
         let addr: u32 = addr.into();
         if addr as usize * 4 >= FFPU.start() {
             let ffpu_addr = addr as usize - FFPU.start() / 4;
@@ -466,7 +462,7 @@ impl<'a, H: HostHandler> MachineContext<'a, H> {
                     BabyBearElem::ZERO,
                 );
             }
-            return self.memory.ffpu_ram[ffpu_addr];
+            self.memory.ffpu_ram[ffpu_addr]
         } else {
             let data = *self.memory.ram.entry(addr).or_insert(0);
             // debug!("data: 0x{data:08X}");
@@ -474,11 +470,7 @@ impl<'a, H: HostHandler> MachineContext<'a, H> {
         }
     }
 
-    fn ram_write(
-        &mut self,
-        addr: BabyBearElem,
-        data: (BabyBearElem, BabyBearElem, BabyBearElem, BabyBearElem),
-    ) -> Result<()> {
+    fn ram_write(&mut self, addr: BabyBearElem, data: BabyBearTup) -> Result<()> {
         let addr: u32 = addr.into();
         if addr as usize * 4 >= FFPU.start() {
             let ffpu_addr = addr as usize - FFPU.start() / 4;
@@ -529,7 +521,7 @@ impl<'a, H: HostHandler> MachineContext<'a, H> {
         if let Some(entry) = self.memory.plonk_accum.get_mut(name) {
             entry.read(outs)
         } else {
-            panic!("Unknown plonk accum {}", name);
+            panic!("Unknown plonk accum {name}");
         }
     }
 
@@ -543,13 +535,7 @@ impl<'a, H: HostHandler> MachineContext<'a, H> {
         }
     }
 
-    fn syscall(
-        &mut self,
-        cycle: usize,
-    ) -> Result<(
-        (BabyBearElem, BabyBearElem, BabyBearElem, BabyBearElem),
-        (BabyBearElem, BabyBearElem, BabyBearElem, BabyBearElem),
-    )> {
+    fn syscall(&mut self, cycle: usize) -> Result<(BabyBearTup, BabyBearTup)> {
         let nr = self.memory.load_register(REG_A7);
         match nr {
             SYS_PANIC => {
@@ -566,7 +552,7 @@ impl<'a, H: HostHandler> MachineContext<'a, H> {
                 let msg_len = self.memory.load_register(REG_A1);
                 let buf = self.memory.load_region(msg_ptr, msg_len);
                 let str = String::from_utf8(buf).unwrap();
-                println!("R0VM[{cycle}] {}", str);
+                println!("R0VM[{cycle}] {str}");
                 Ok((split_word8(0), split_word8(0)))
             }
             SYS_IO => {
@@ -618,7 +604,7 @@ impl<'a, H: HostHandler> MachineContext<'a, H> {
         }
     }
 
-    fn decode(&self, word: (BabyBearElem, BabyBearElem, BabyBearElem, BabyBearElem)) -> OpCode {
+    fn decode(&self, word: BabyBearTup) -> OpCode {
         let word = merge_word8(word);
         let opcode = word & 0x0000007f;
         let rs2 = (word & 0x01f00000) >> 20;

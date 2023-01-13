@@ -78,7 +78,7 @@ pub trait Elem:
             if n % 2 == 1 {
                 tot *= x;
             }
-            n = n / 2;
+            n /= 2;
             x *= x;
         }
         tot

@@ -76,8 +76,8 @@ impl MethodId {
                 .chunks_exact(DIGEST_WORD_SIZE)
                 .map(|x| {
                     let mut word = 0;
-                    for i in 0..4 {
-                        word |= (x[i] as u32) << (i * 8);
+                    for (i, val) in x.iter().enumerate().take(4) {
+                        word |= (*val as u32) << (i * 8);
                     }
                     word
                 })
@@ -150,7 +150,7 @@ mod prove {
             hal.zk_shift(&coeffs, code_size);
             // Make the poly-group & extract the root
             let code_group = PolyGroup::new(&hal, &coeffs, code_size, cycles, "code");
-            table.push(code_group.merkle.root().clone());
+            table.push(*code_group.merkle.root());
         }
 
         Ok(MethodId { table })

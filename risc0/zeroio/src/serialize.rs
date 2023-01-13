@@ -147,7 +147,7 @@ impl Serialize for alloc::string::String {
 
         for (w, val) in core::iter::zip(
             str_data.buf.iter_mut(),
-            as_words_padded(self.as_bytes().into_iter().cloned()),
+            as_words_padded(self.as_bytes().iter().cloned()),
         ) {
             *w = val;
         }
@@ -264,7 +264,7 @@ impl<const N: usize> Serialize for [u8; N] {
     fn fill(&self, buf: &mut AllocBuf, _a: &mut Alloc) -> Result<()> {
         for (w, val) in core::iter::zip(
             buf.buf(Self::FIXED_WORDS)?.iter_mut(),
-            as_words_padded(self.into_iter().cloned()),
+            as_words_padded(self.iter().cloned()),
         ) {
             *w = val;
         }

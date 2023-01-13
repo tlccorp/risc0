@@ -81,6 +81,7 @@ pub const DIGEST_BYTES: usize = WORD_SIZE * DIGEST_WORDS;
 static mut READ_PTR: UnsafeCell<usize> = UnsafeCell::new(memory::INPUT.start());
 
 #[inline(always)]
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn sys_panic(msg_ptr: *const u8, msg_len: usize) -> ! {
     #[cfg(target_os = "zkvm")]
     {
@@ -98,6 +99,7 @@ pub unsafe fn sys_panic(msg_ptr: *const u8, msg_len: usize) -> ! {
 }
 
 #[inline(always)]
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn sys_log(msg_ptr: *const u8, msg_len: usize) {
     #[cfg(target_os = "zkvm")]
     asm!(
@@ -112,6 +114,7 @@ pub unsafe fn sys_log(msg_ptr: *const u8, msg_len: usize) {
 }
 
 #[inline(always)]
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn sys_io(channel: u32, buf_ptr: *const u8, buf_len: usize) -> &'static [u8] {
     #[cfg(target_os = "zkvm")]
     {
@@ -140,6 +143,7 @@ pub unsafe fn sys_io(channel: u32, buf_ptr: *const u8, buf_len: usize) -> &'stat
 }
 
 #[inline(always)]
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn sys_commit(buf_ptr: *const u32, buf_len: usize) {
     #[cfg(target_os = "zkvm")]
     {
@@ -156,6 +160,7 @@ pub unsafe fn sys_commit(buf_ptr: *const u32, buf_len: usize) {
 }
 
 #[inline(always)]
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn sys_cycle_count() -> usize {
     #[cfg(target_os = "zkvm")]
     {
@@ -174,6 +179,7 @@ pub unsafe fn sys_cycle_count() -> usize {
 }
 
 #[inline(always)]
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn sys_ffpu(code: &[u32], args: &[*mut u32]) {
     #[cfg(target_os = "zkvm")]
     {
@@ -194,6 +200,7 @@ pub unsafe fn sys_ffpu(code: &[u32], args: &[*mut u32]) {
 }
 
 #[inline(always)]
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn sys_compute_poly(
     arg0_ptr: *const SliceDescriptor, // eval_u
     arg1_ptr: *const u32,             // poly_mix
@@ -224,6 +231,7 @@ pub unsafe fn sys_compute_poly(
 }
 
 #[inline(always)]
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn sys_halt() {
     #[cfg(target_os = "zkvm")]
     {
@@ -238,6 +246,7 @@ pub unsafe fn sys_halt() {
 }
 
 #[inline(always)]
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn sys_output(output_id: u32, output_value: u32) {
     assert!(
         output_id < 9,
@@ -257,6 +266,7 @@ pub unsafe fn sys_output(output_id: u32, output_value: u32) {
 }
 
 #[inline(always)]
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn sys_sha_compress(
     out_state: *mut [u32; DIGEST_WORDS],
     in_state: *const [u32; DIGEST_WORDS],
@@ -280,6 +290,7 @@ pub unsafe fn sys_sha_compress(
 }
 
 #[inline(always)]
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn sys_sha_buffer(
     out_state: *mut [u32; DIGEST_WORDS],
     in_state: *const [u32; DIGEST_WORDS],

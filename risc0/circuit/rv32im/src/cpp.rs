@@ -140,4 +140,4 @@ impl PolyFp<BabyBear> for CircuitImpl {
     }
 }
 
-impl<'a> CircuitDef<BabyBear> for CircuitImpl {}
+impl CircuitDef<BabyBear> for CircuitImpl {}

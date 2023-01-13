@@ -329,7 +329,7 @@ fn emit_serialize_struct(input: &DeriveInput, st: &DataStruct) -> Result<TokenSt
         tot_len,
         fill,
         ..
-    } = make_struct_impls(&quote! {#name}, &input.vis, &st.fields, &genfrags, false);
+    } = make_struct_impls(&quote! {#name}, &input.vis, &st.fields, genfrags, false);
 
     // We serialize structures as simply all the fields in order.
     let inhibit_warns = warning_inhibit();
@@ -347,7 +347,7 @@ fn emit_serialize_struct(input: &DeriveInput, st: &DataStruct) -> Result<TokenSt
         }
     };
 
-    Ok(expanded.into())
+    Ok(expanded)
 }
 
 fn emit_deserialize_struct(input: &DeriveInput, fields: &Fields) -> Result<TokenStream> {
@@ -369,7 +369,7 @@ fn emit_deserialize_struct(input: &DeriveInput, fields: &Fields) -> Result<Token
         declare_ref,
         deserialize_impl,
         ..
-    } = make_struct_impls(&quote! {#name}, &input.vis, fields, &genfrags, false);
+    } = make_struct_impls(&quote! {#name}, &input.vis, fields, genfrags, false);
 
     let inhibit_warns = warning_inhibit();
     let vis = &input.vis;
@@ -392,11 +392,11 @@ fn emit_deserialize_struct(input: &DeriveInput, fields: &Fields) -> Result<Token
         }
     };
 
-    Ok(expanded.into())
+    Ok(expanded)
 }
 
 fn make_var_generated_type(name: &Ident, var_name: &Ident) -> Ident {
-    format_ident!("{}Ref", format!("{}::{}", name, var_name).replace(":", "_"))
+    format_ident!("{}Ref", format!("{name}::{var_name}").replace(':', "_"))
 }
 
 // Fragments for each variant
@@ -539,7 +539,7 @@ fn emit_serialize_enum(input: &DeriveInput, en: &DataEnum) -> Result<TokenStream
             }
         }
     };
-    Ok(expanded.into())
+    Ok(expanded)
 }
 
 fn emit_deserialize_enum(input: &DeriveInput, en: &DataEnum) -> Result<TokenStream> {
@@ -640,7 +640,7 @@ fn emit_deserialize_enum(input: &DeriveInput, en: &DataEnum) -> Result<TokenStre
         }
     };
 
-    Ok(expanded.into())
+    Ok(expanded)
 }
 
 // With the debug-derive feature, this dumps out all the generated
@@ -652,8 +652,8 @@ fn debug_dump(ty: &str, ident: &Ident, res: &mut TokenStream) {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
         let path = std::path::Path::new(&manifest_dir)
             .join("src")
-            .join(&filename);
-        std::fs::write(&path, format!("{}", res)).unwrap();
+            .join(filename);
+        std::fs::write(&path, format!("{res}")).unwrap();
 
         let pathname = path.display().to_string();
         *res = quote! {
@@ -668,13 +668,13 @@ pub fn derive_serialize(input: proc_macro::TokenStream) -> proc_macro::TokenStre
 
     let mut res = match &input.data {
         syn::Data::Struct(ref st) => emit_serialize_struct(&input, st),
-        syn::Data::Enum(en) => emit_serialize_enum(&input, &en),
+        syn::Data::Enum(en) => emit_serialize_enum(&input, en),
         _ => Err(Error::new(
             input.span().unwrap().into(),
             "Zeroio derive only supports structs and enums",
         )),
     }
-    .unwrap_or_else(|err| Error::to_compile_error(&err).into());
+    .unwrap_or_else(|err| Error::to_compile_error(&err));
     debug_dump("ser", &input.ident, &mut res);
     res.into()
 }
@@ -685,13 +685,13 @@ pub fn derive_deserialize(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 
     let mut res = match &input.data {
         syn::Data::Struct(st) => emit_deserialize_struct(&input, &st.fields),
-        syn::Data::Enum(en) => emit_deserialize_enum(&input, &en),
+        syn::Data::Enum(en) => emit_deserialize_enum(&input, en),
         _ => Err(Error::new(
             input.span().unwrap().into(),
             "Zeroio derive only supports structs and enums",
         )),
     }
-    .unwrap_or_else(|err| Error::to_compile_error(&err).into());
+    .unwrap_or_else(|err| Error::to_compile_error(&err));
     debug_dump("deser", &input.ident, &mut res);
     res.into()
 }

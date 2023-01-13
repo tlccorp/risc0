@@ -1572,6 +1572,7 @@ const CODE: &[u32] = &[
 ];
 
 #[inline(always)]
+#[allow(clippy::identity_op)]
 pub fn verify_taps_rv32im(
     arg0: &[u32; 4 * EXT_ELEM_SIZE],
     arg1: &[u32; 24 * EXT_ELEM_SIZE],

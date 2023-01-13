@@ -88,7 +88,7 @@ fn lookup_pc(pc: u32, ctx: &Context<EndianRcSlice<RunTimeEndian>>) -> Vec<Frame>
             .collect::<Vec<Frame>>()
             .unwrap(),
         Err(err) => {
-            eprintln!("Error finding frames!  {:?}", err);
+            eprintln!("Error finding frames!  {err:?}");
             [].into()
         }
     }
@@ -133,20 +133,15 @@ impl Profiler {
 
     /// Returns a callback to populate this profiler, suitable for
     /// passing to ProverOpts::with_trace_callback.
-    pub fn make_trace_callback<'a>(
-        &'a mut self,
-    ) -> impl FnMut(TraceEvent) -> anyhow::Result<()> + 'a {
+    pub fn make_trace_callback(&mut self) -> impl FnMut(TraceEvent) -> anyhow::Result<()> + '_ {
         |event| {
-            match event {
-                TraceEvent::InstructionStart { cycle, pc } => {
-                    // Count against the last program counter.
-                    let cycles = cycle - self.cycle;
-                    let orig_pc = self.pc;
-                    *self.counts.entry(orig_pc).or_insert(0) += cycles as usize;
-                    self.pc = pc;
-                    self.cycle = cycle;
-                }
-                _ => (),
+            if let TraceEvent::InstructionStart { cycle, pc } = event {
+                // Count against the last program counter.
+                let cycles = cycle - self.cycle;
+                let orig_pc = self.pc;
+                *self.counts.entry(orig_pc).or_insert(0) += cycles as usize;
+                self.pc = pc;
+                self.cycle = cycle;
             }
             Ok(())
         }
@@ -219,7 +214,6 @@ impl ProfileBuilder {
         let sample_type = proto::ValueType {
             r#type: builder.get_string("cycles"),
             unit: builder.get_string("count"),
-            ..Default::default()
         };
         builder.profile.sample_type.push(sample_type);
 

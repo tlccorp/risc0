@@ -72,7 +72,7 @@ impl<'a, C: PolyFp<BabyBear> + Sync> EvalCheck<BabyBearCpuHal> for CpuEvalCheck<
         let check = check.as_slice();
         let check = unsafe { std::slice::from_raw_parts(check.as_ptr(), check.len()) };
 
-        let args: &[&[BabyBearElem]] = &[&code, &out, &data, &mix, &accum];
+        let args: &[&[BabyBearElem]] = &[code, out, data, mix, accum];
 
         (0..domain).into_par_iter().for_each(|cycle| {
             let tot = self.circuit.poly_fp(cycle, domain, &poly_mix, args);

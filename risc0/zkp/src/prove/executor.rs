@@ -87,6 +87,7 @@ where
         }
     }
 
+    #[allow(clippy::needless_range_loop)]
     pub fn step(&mut self, code: &[F::Elem], needed_fini: usize) -> Result<bool> {
         // debug!("code: {:?}", code);
         let next_cycles = self.cycle + needed_fini + ZK_CYCLES;

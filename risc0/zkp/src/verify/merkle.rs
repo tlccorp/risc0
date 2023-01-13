@@ -138,7 +138,7 @@ impl<'a, H: VerifyHal> MerkleTreeVerifier<'a, H> {
         if self.rest.is_empty() {
             &self.top[self.params.idx_to_top(1)]
         } else {
-            &*self.rest[self.params.idx_to_rest(1)]
+            &self.rest[self.params.idx_to_rest(1)]
         }
     }
 
@@ -150,7 +150,7 @@ impl<'a, H: VerifyHal> MerkleTreeVerifier<'a, H> {
     ) -> Result<&'a [H::Elem], VerificationError> {
         if idx >= self.params.row_size {
             return Err(VerificationError::MerkleQueryOutOfRange {
-                idx: idx,
+                idx,
                 rows: self.params.row_size,
             });
         }
@@ -172,9 +172,9 @@ impl<'a, H: VerifyHal> MerkleTreeVerifier<'a, H> {
             // Now ascend to the parent index, and compute the hash there.
             idx /= 2;
             if low_bit == 1 {
-                cur = self.hal.sha().hash_pair(&other, &cur);
+                cur = self.hal.sha().hash_pair(other, &cur);
             } else {
-                cur = self.hal.sha().hash_pair(&cur, &other);
+                cur = self.hal.sha().hash_pair(&cur, other);
             }
         }
         // Once we reduce to an index for which we have the hash, check that it's

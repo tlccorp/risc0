@@ -129,10 +129,10 @@ impl Digest {
             .collect()
     }
 
-    /// Converts a hexadecimal string into a [Digest].
-    pub fn from_str(s: &str) -> Digest {
-        s.into()
-    }
+    // / Converts a hexadecimal string into a [Digest].
+    // pub fn from_str(s: &str) -> Digest {
+    //     s.into()
+    // }
 }
 
 impl From<&str> for Digest {
@@ -227,7 +227,7 @@ mod tests {
     #[test]
     fn test_from_str() {
         assert_eq!(
-            Digest::from_str("00000077000000AA0000001200000034000000560000007a000000a900000009"),
+            Digest::from("00000077000000AA0000001200000034000000560000007a000000a900000009"),
             Digest::new([
                 0x77_u32.to_be(),
                 0xaa_u32.to_be(),
@@ -244,7 +244,7 @@ mod tests {
     #[test]
     fn test_roundtrip() {
         const HEX: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
-        assert_eq!(Digest::from_str(HEX).to_hex(), HEX);
+        assert_eq!(Digest::from(HEX).to_hex(), HEX);
     }
 }
 
@@ -291,16 +291,13 @@ pub mod testutil {
         // >>> hashlib.sha256("Byzantium").hexdigest()
         // 'f75c763b4a52709ac294fc7bd7cf14dd45718c3d50b36f4732b05b8c6017492a'
         assert_eq!(
-            sha.hash_bytes(&"Byzantium".as_bytes()).to_hex(),
+            sha.hash_bytes("Byzantium".as_bytes()).to_hex(),
             "f75c763b4a52709ac294fc7bd7cf14dd45718c3d50b36f4732b05b8c6017492a"
         );
     }
 
     fn hash_elems<S: Sha>(sha: &S, len: usize) -> Digest {
-        let items: Vec<BabyBearElem> = (0..len as u32)
-            .into_iter()
-            .map(|x| BabyBearElem::new(x))
-            .collect();
+        let items: Vec<BabyBearElem> = (0..len as u32).into_iter().map(BabyBearElem::new).collect();
         *sha.hash_raw_pod_slice(items.as_slice())
     }
 
@@ -330,7 +327,7 @@ pub mod testutil {
             "903fe671a0971f6dea6e8a1180dcd1ce87b56d0b42ee3861212e86428a983a5b",
         ];
 
-        let expected: Vec<Digest> = EXPECTED_STRS.iter().map(|x| Digest::from_str(x)).collect();
+        let expected: Vec<Digest> = EXPECTED_STRS.iter().map(|x| Digest::from(*x)).collect();
         let actual: Vec<Digest> = LENS.iter().map(|x| hash_elems(sha, *x)).collect();
         assert_eq!(expected, actual);
     }
@@ -346,7 +343,7 @@ pub mod testutil {
             "5af62d0303208f4573656ac707d7447f0303fd76a134a775f329104d03c37985",
         ];
 
-        let expected: Vec<Digest> = EXPECTED_STRS.iter().map(|x| Digest::from_str(x)).collect();
+        let expected: Vec<Digest> = EXPECTED_STRS.iter().map(|x| Digest::from(*x)).collect();
         let actual: Vec<Digest> = LENS.iter().map(|x| hash_extelems(sha, *x)).collect();
         assert_eq!(expected, actual);
     }
@@ -356,27 +353,21 @@ pub mod testutil {
             let items: &[u32] = &[1];
             assert_eq!(
                 *sha.hash_raw_pod_slice(items),
-                Digest::from_str(
-                    "e3050856aac389661ae490656ad0ea57df6aff0ff6eef306f8cc2eed4f240249"
-                )
+                Digest::from("e3050856aac389661ae490656ad0ea57df6aff0ff6eef306f8cc2eed4f240249")
             );
         }
         {
             let items: &[u32] = &[1, 2];
             assert_eq!(
                 *sha.hash_raw_pod_slice(items),
-                Digest::from_str(
-                    "4138ebae12299733cc677d1150c2a0139454662fc76ec95da75d2bf9efddc57a"
-                )
+                Digest::from("4138ebae12299733cc677d1150c2a0139454662fc76ec95da75d2bf9efddc57a")
             );
         }
         {
             let items: &[u32] = &[0xffffffff];
             assert_eq!(
                 *sha.hash_raw_pod_slice(items),
-                Digest::from_str(
-                    "a3dba037d56175209dfd4191f727e91c5feb67e65a6ab5ed4daf0893c89598c8"
-                )
+                Digest::from("a3dba037d56175209dfd4191f727e91c5feb67e65a6ab5ed4daf0893c89598c8")
             );
         }
     }
@@ -384,25 +375,17 @@ pub mod testutil {
     fn test_hash_pair<S: Sha>(sha: &S) {
         assert_eq!(
             *sha.hash_pair(
-                &Digest::from_str(
-                    "67e6096a85ae67bb72f36e3c3af54fa57f520e518c68059babd9831f19cde05b"
-                ),
-                &Digest::from_str(
-                    "ad5c37ed90bb53c604e9ce787f6feeac7674bff229c92dc97ce2ba1115c0eb41"
-                )
+                &Digest::from("67e6096a85ae67bb72f36e3c3af54fa57f520e518c68059babd9831f19cde05b"),
+                &Digest::from("ad5c37ed90bb53c604e9ce787f6feeac7674bff229c92dc97ce2ba1115c0eb41")
             ),
-            Digest::from_str("3aa2c47c47cd9e5c5259fd1c3428c30b9608201f5e163061deea8d2d7c65f2c3")
+            Digest::from("3aa2c47c47cd9e5c5259fd1c3428c30b9608201f5e163061deea8d2d7c65f2c3")
         );
         assert_eq!(
             *sha.hash_pair(
-                &Digest::from_str(
-                    "0000000000000000000000000000000000000000000000000000000000000000"
-                ),
-                &Digest::from_str(
-                    "0000000000000000000000000000000000000000000000000000000000000000"
-                )
+                &Digest::from("0000000000000000000000000000000000000000000000000000000000000000"),
+                &Digest::from("0000000000000000000000000000000000000000000000000000000000000000")
             ),
-            Digest::from_str("da5698be17b9b46962335799779fbeca8ce5d491c0d26243bafef9ea1837a9d8")
+            Digest::from("da5698be17b9b46962335799779fbeca8ce5d491c0d26243bafef9ea1837a9d8")
         );
     }
 
@@ -426,12 +409,12 @@ pub mod testutil {
                 1u32.to_be(),
                 0u32.to_be(),
             ]),
-            Digest::from_str("b6f1e1b52e435545aa21cc9d3ce54e9af9da118042163abf2a739aebd413ac8d")
+            Digest::from("b6f1e1b52e435545aa21cc9d3ce54e9af9da118042163abf2a739aebd413ac8d")
         );
 
         assert_eq!(
             *sha.hash_raw_words(&[1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 4, 3, 2, 1, 0,]),
-            Digest::from_str("0410500505eb63608def984ecc0b7820cba1012570e3d288c483f35021c971a6")
+            Digest::from("0410500505eb63608def984ecc0b7820cba1012570e3d288c483f35021c971a6")
         );
 
         assert_eq!(
@@ -439,7 +422,7 @@ pub mod testutil {
                 1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 4, 3, 2, 1, 0, //
                 1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 4, 3, 2, 1, 0,
             ]),
-            Digest::from_str("0343d500097e63123d3c7f418f465bfd2253652f351c90c75a05cb33946e71f1")
+            Digest::from("0343d500097e63123d3c7f418f465bfd2253652f351c90c75a05cb33946e71f1")
         );
     }
 }

@@ -55,10 +55,10 @@ impl Default for Elem {
 /// 2. Left-shift ones over by 32, leaving 32 ones and 32 zeros: `(2^64 - 2^32)`
 /// 3. Add one to get `2^64 - 2^32 + 1`
 
-const P: u64 = (0xffffffff_ffffffff << 32) + 1;
+const P: u64 = (0xffff_ffff_ffff_ffff << 32) + 1;
 
 impl field::Elem for Elem {
-    const INVALID: Self = Elem(0xffffffff_ffffffff);
+    const INVALID: Self = Elem(0xffff_ffff_ffff_ffff);
     const ZERO: Self = Elem::new(0u64);
     const ONE: Self = Elem::new(1u64);
     const WORDS: usize = 2;
@@ -260,7 +260,7 @@ impl From<&Elem> for u64 {
 
 impl From<Elem> for u64 {
     fn from(x: Elem) -> Self {
-        x.0.into()
+        x.0
     }
 }
 
@@ -284,7 +284,11 @@ fn add(lhs: u64, rhs: u64) -> u64 {
 /// Wrapping subtraction of [Elem] using Goldilocks field modulus
 fn sub(lhs: u64, rhs: u64) -> u64 {
     let x = lhs.wrapping_sub(rhs);
-    return if x > lhs { x.wrapping_add(P) } else { x };
+    if x > lhs {
+        x.wrapping_add(P)
+    } else {
+        x
+    }
 }
 
 /// Wrapping multiplication of [Elem] using Goldilocks field modulus
@@ -357,7 +361,7 @@ impl field::Elem for ExtElem {
             if n % 2 == 1 {
                 tot *= x;
             }
-            n = n / 2;
+            n /= 2;
             x *= x;
         }
         tot
@@ -405,7 +409,7 @@ impl field::ExtElem for ExtElem {
     type SubElem = Elem;
 
     fn from_subfield(elem: &Elem) -> Self {
-        Self::from([elem.clone(), Elem::ZERO])
+        Self::from([*elem, Elem::ZERO])
     }
 
     fn from_subelems(elems: impl IntoIterator<Item = Self::SubElem>) -> Self {

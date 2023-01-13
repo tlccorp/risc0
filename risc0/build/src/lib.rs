@@ -68,6 +68,7 @@
 //! use methods::{MULTIPLY_ELF, MULTIPLY_ID};
 //! ```
 
+#![allow(clippy::needless_doctest_main)]
 #![deny(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
 
@@ -142,20 +143,20 @@ impl Risc0Method {
         let elf_sha_hex: String = elf_sha
             .as_slice()
             .iter()
-            .map(|x| format!("{:02x}", x))
+            .map(|x| format!("{x:02x}"))
             .collect();
 
         if method_id_path.exists() {
             if let Ok(cached_sha) = std::fs::read(&elf_sha_path) {
                 if cached_sha == elf_sha.as_slice() {
-                    println!("MethodID for {} ({}) up to date", self.name, elf_sha_hex);
+                    println!("MethodID for {} ({elf_sha_hex}) up to date", self.name);
                     let buf = std::fs::read(&method_id_path).unwrap();
                     return MethodId::from_slice(&buf).unwrap();
                 }
             }
         }
 
-        println!("Computing MethodID for {} ({:})!", self.name, elf_sha_hex);
+        println!("Computing MethodID for {} ({elf_sha_hex})!", self.name);
         let method_id = MethodId::compute_with_limit(&elf_contents, code_limit).unwrap();
         std::fs::write(method_id_path, method_id.as_slice()).unwrap();
         std::fs::write(elf_sha_path, elf_sha).unwrap();
@@ -170,9 +171,9 @@ impl Risc0Method {
         let elf_contents = std::fs::read(&self.elf_path).unwrap();
         format!(
             r##"
-pub const {upper}_ELF: &'static [u8] = &{elf_contents:?};
-pub const {upper}_ID: &'static [u8] = &{method_id:?};
-pub const {upper}_PATH: &'static str = r#"{elf_path}"#;
+pub const {upper}_ELF: &[u8] = &{elf_contents:?};
+pub const {upper}_ID: &[u8] = &{method_id:?};
+pub const {upper}_PATH: &str = r#"{elf_path}"#;
             "##
         )
     }
@@ -215,7 +216,7 @@ fn sha_digest_with_hex(data: &[u8]) -> (Vec<u8>, String) {
         bin_sha
             .as_slice()
             .iter()
-            .map(|x| format!("{:02x}", x))
+            .map(|x| format!("{x:02x}"))
             .collect(),
     )
 }
@@ -236,10 +237,10 @@ where
         .iter()
         .filter(|pkg| {
             let std_path: &Path = pkg.manifest_path.as_ref();
-            std_path == &manifest_path
+            std_path == manifest_path
         })
         .collect();
-    if matching.len() == 0 {
+    if matching.is_empty() {
         eprintln!(
             "ERROR: No package found in {}",
             manifest_dir.as_ref().display()
@@ -313,8 +314,8 @@ where
 
     // Rust standard library.  If any of the RUST_LIB_MAP changed, we
     // want to have a different hash so that we make sure we recompile.
-    let (_, src_id_hash) = sha_digest_with_hex(format!("{:?}", RUST_LIB_MAP).as_bytes());
-    let rust_lib_path = out_dir.as_ref().join(format!("rust-std_{}", src_id_hash));
+    let (_, src_id_hash) = sha_digest_with_hex(format!("{RUST_LIB_MAP:?}").as_bytes());
+    let rust_lib_path = out_dir.as_ref().join(format!("rust-std_{src_id_hash}"));
     if !rust_lib_path.exists() {
         println!(
             "Standard library {} does not exist; downloading",
@@ -325,13 +326,13 @@ where
     }
 
     GuestBuildEnv {
-        target_spec: target_spec_path.to_owned(),
+        target_spec: target_spec_path,
         rust_lib_src: rust_lib_path,
     }
 }
 
 fn risc0_root() -> PathBuf {
-    home::home_dir().unwrap().join(".risc0").into()
+    home::home_dir().unwrap().join(".risc0")
 }
 
 fn download_zip_map<P>(zip_map: &[ZipMapEntry], dest_base: P)
@@ -345,7 +346,7 @@ where
 
     let temp_dir = tempdir().unwrap();
     let mut downloader = Downloader::builder()
-        .download_folder(&temp_dir.path())
+        .download_folder(temp_dir.path())
         .build()
         .unwrap();
 
@@ -356,7 +357,7 @@ where
 
     for zm in zip_map.iter() {
         let src_prefix = Path::new(&zm.src_prefix);
-        let dst_prefix = tmp_dest_base.join(&zm.dst_prefix);
+        let dst_prefix = tmp_dest_base.join(zm.dst_prefix);
         fs::create_dir_all(&dst_prefix).unwrap();
 
         let zip_path = cache_dir.join(zm.filename);
@@ -396,7 +397,7 @@ where
                 nwrote += 1;
             }
         }
-        println!("Wrote {} files", nwrote);
+        println!("Wrote {nwrote} files");
     }
     fs::rename(&tmp_dest_base, dest_base.as_ref()).unwrap();
 }
@@ -448,7 +449,7 @@ fn build_guest_package<P>(
         guest_build_env.rust_lib_src.to_str().unwrap().into()
     };
 
-    println!("Using rust standard library root: {}", risc0_standard_lib);
+    println!("Using rust standard library root: {risc0_standard_lib}");
 
     let mut cmd = Command::new(cargo);
     let mut child = cmd
@@ -471,9 +472,9 @@ fn build_guest_package<P>(
         .ok();
 
     if let Some(tty) = &mut tty {
-        write!(
+        writeln!(
             tty,
-            "{}: Starting build for riscv32im-risc0-zkvm-elf   \n",
+            "{}: Starting build for riscv32im-risc0-zkvm-elf   ",
             pkg.name
         )
         .unwrap();
@@ -481,7 +482,7 @@ fn build_guest_package<P>(
 
     for line in BufReader::new(stderr).lines() {
         match &mut tty {
-            Some(tty) => write!(tty, "{}: {}   \n", pkg.name, line.unwrap()).unwrap(),
+            Some(tty) => writeln!(tty, "{}: {}   ", pkg.name, line.unwrap()).unwrap(),
             None => eprintln!("{}", line.unwrap()),
         }
     }
@@ -534,7 +535,7 @@ pub fn embed_methods_with_options(mut guest_pkg_to_options: HashMap<&str, GuestO
     let methods_path = out_dir.join("methods.rs");
     let mut methods_file = File::create(&methods_path).unwrap();
 
-    let guest_build_env = setup_guest_build_env(&out_dir);
+    let guest_build_env = setup_guest_build_env(out_dir);
 
     for guest_pkg in guest_packages {
         println!("Building guest package {}.{}", pkg.name, guest_pkg.name);
@@ -545,13 +546,13 @@ pub fn embed_methods_with_options(mut guest_pkg_to_options: HashMap<&str, GuestO
 
         build_guest_package(
             &guest_pkg,
-            &out_dir.join("riscv-guest"),
+            out_dir.join("riscv-guest"),
             &guest_build_env,
             guest_options.features,
             guest_options.std,
         );
 
-        for method in guest_methods(&guest_pkg, &out_dir) {
+        for method in guest_methods(&guest_pkg, out_dir) {
             methods_file
                 .write_all(method.rust_def(guest_options.code_limit).as_bytes())
                 .unwrap();

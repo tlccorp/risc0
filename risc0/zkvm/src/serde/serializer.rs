@@ -32,7 +32,7 @@ where
     serializer.stream.release()
 }
 
-pub fn to_vec<'a, T>(value: &'a T) -> Result<alloc::vec::Vec<u32>>
+pub fn to_vec<T>(value: &T) -> Result<alloc::vec::Vec<u32>>
 where
     T: Serialize + ?Sized,
 {
@@ -44,7 +44,7 @@ where
     serializer.stream.release()
 }
 
-pub fn to_vec_with_capacity<'a, T>(value: &'a T, cap: usize) -> Result<alloc::vec::Vec<u32>>
+pub fn to_vec_with_capacity<T>(value: &T, cap: usize) -> Result<alloc::vec::Vec<u32>>
 where
     T: Serialize + ?Sized,
 {
@@ -106,7 +106,7 @@ impl<'a, W: StreamWriter> serde::ser::Serializer for &'a mut Serializer<W> {
     }
 
     fn serialize_bool(self, v: bool) -> Result<()> {
-        self.serialize_u8(if v { 1 } else { 0 })
+        self.serialize_u8(u8::from(v))
     }
 
     fn serialize_i8(self, v: i8) -> Result<()> {
@@ -434,7 +434,7 @@ impl<'a> StreamWriter for Slice<'a> {
         // Remove the slice we're modifying out of self.slice so we
         // don't run into problems trying to replace it while it's
         // borrowed.
-        let tmp: &mut [u32] = mem::replace(&mut self.slice, &mut []);
+        let tmp: &mut [u32] = mem::take(&mut self.slice);
         let (head, tail) = tmp.split_at_mut(self.idx);
         self.slice = tail;
         self.idx = 0;
@@ -449,6 +449,12 @@ impl<'a> Slice<'a> {
 }
 
 pub struct AllocVec(pub alloc::vec::Vec<u32>);
+
+impl Default for AllocVec {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl AllocVec {
     pub fn new() -> Self {
@@ -478,10 +484,10 @@ impl StreamWriter for AllocVec {
             self.0.push(word);
         }
         let remainder = chunks.remainder();
-        if remainder.len() > 0 {
+        if !remainder.is_empty() {
             let mut word = 0;
-            for i in 0..remainder.len() {
-                word |= (remainder[i] as u32) << (8 * i);
+            for (i, val) in remainder.iter().enumerate() {
+                word |= (*val as u32) << (8 * i);
             }
             self.0.push(word);
         }

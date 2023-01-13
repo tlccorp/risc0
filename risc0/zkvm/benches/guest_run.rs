@@ -61,7 +61,7 @@ where
 {
     let mut rng = rand::thread_rng();
     let mut buf: Vec<T> = Vec::new();
-    buf.resize_with(len as usize, || rng.gen());
+    buf.resize_with(len, || rng.gen());
     buf
 }
 
@@ -78,7 +78,7 @@ pub fn bench(c: &mut Criterion) {
         hash_bytes_group.throughput(Throughput::Bytes(buf_bytes));
         hash_bytes_group.bench_function(BenchmarkId::from_parameter(buf_bytes), |b| {
             let buf: Vec<u8> = rand_buffer(buf_bytes as usize);
-            guest_iter(b, BenchmarkSpec::HashBytes { buf: buf.clone() })
+            guest_iter(b, BenchmarkSpec::HashBytes { buf })
         });
     }
     hash_bytes_group.finish();

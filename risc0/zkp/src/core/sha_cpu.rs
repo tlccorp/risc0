@@ -139,7 +139,7 @@ impl Sha for Impl {
             compress256(&mut state, slice::from_ref(GenericArray::from_slice(block)));
         }
         let remainder = blocks.remainder();
-        if remainder.len() > 0 {
+        if !remainder.is_empty() {
             let mut last_block: GenericArray<u8, U64> = GenericArray::default();
             bytemuck::cast_slice_mut(last_block.as_mut_slice())[..remainder.len()]
                 .clone_from_slice(remainder);

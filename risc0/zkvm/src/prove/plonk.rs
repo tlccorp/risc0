@@ -56,6 +56,7 @@ impl RamPlonk {
         }
     }
 
+    #[allow(clippy::identity_op)]
     pub fn write<E: field::Elem>(&mut self, elems: &[E; 7])
     where
         u32: From<E>,
@@ -93,6 +94,7 @@ impl RamPlonk {
         self.ffpu_ram.sort_unstable_by(|a, b| b.cmp(a));
     }
 
+    #[allow(clippy::identity_op)]
     pub fn read<E: field::Elem>(&mut self, elems: &mut [E; 7])
     where
         u32: From<E>,
@@ -153,6 +155,7 @@ impl BytesPlonk {
         // BytesPlonk is already sorted.
     }
 
+    #[allow(clippy::identity_op)]
     pub fn read<E: field::Elem>(&mut self, outs: &mut [E; 2]) {
         while self.counts[self.read_pos] == 0 {
             self.read_pos += 1;
@@ -198,7 +201,7 @@ impl<F: field::Field> PlonkAccum<F> {
     pub fn calc_prefix_products(&mut self) {
         let mut tot = F::ExtElem::ONE;
         for val in self.elems.iter_mut() {
-            tot = tot * *val;
+            tot *= *val;
             *val = tot;
         }
     }

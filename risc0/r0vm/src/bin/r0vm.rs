@@ -103,7 +103,7 @@ fn run_prover(
     opts: ProverOpts,
     initial_input: Option<Vec<u8>>,
 ) -> Result<(Receipt, Vec<u8>)> {
-    let mut prover = Prover::new_with_opts(&elf_contents, method_id, opts).unwrap();
+    let mut prover = Prover::new_with_opts(elf_contents, method_id, opts).unwrap();
     if let Some(bytes) = initial_input {
         prover.add_input_u8_slice(bytes.as_slice());
     }
@@ -146,18 +146,13 @@ fn main() {
         // generate an actual proof.
         MethodId::from_slice(&[]).unwrap()
     } else {
-        read_method_id(
-            args.verbose,
-            &args.elf,
-            args.method_id.as_ref().map(|p| p.as_path()),
-        )
-        .unwrap_or_else(|| {
+        read_method_id(args.verbose, &args.elf, args.method_id.as_deref()).unwrap_or_else(|| {
             if args.verbose > 0 {
                 eprintln!("Computing method id");
             }
             let computed = MethodId::compute_with_limit(&elf_contents, args.limit).unwrap();
             if let Some(method_id_file) = args.method_id.as_ref() {
-                std::fs::write(&method_id_file, computed.as_slice()).unwrap();
+                std::fs::write(method_id_file, computed.as_slice()).unwrap();
                 if args.verbose > 0 {
                     eprintln!("Saved method id to {}", method_id_file.display());
                 }
@@ -196,7 +191,7 @@ fn main() {
     if let Some(ref mut profiler) = guest_prof.as_mut() {
         profiler.finalize();
         let report = profiler.encode_to_vec();
-        fs::write(args.pprof_out.as_ref().unwrap(), &report)
+        fs::write(args.pprof_out.as_ref().unwrap(), report)
             .expect("Unable to write profiling output");
     }
     let (receipt, output) = proof.expect("Run failed");
@@ -207,11 +202,9 @@ fn main() {
         if args.verbose > 0 {
             eprintln!("Skipping seal generation.");
         }
-    } else {
-        if args.verbose > 0 {
-            eprintln!("Verifying that we executed correctly.");
-            receipt.verify(&method_id).unwrap();
-        }
+    } else if args.verbose > 0 {
+        eprintln!("Verifying that we executed correctly.");
+        receipt.verify(&method_id).unwrap();
     }
 
     if let Some(receipt_file) = args.receipt.as_ref() {

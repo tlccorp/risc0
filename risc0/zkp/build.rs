@@ -24,11 +24,11 @@ fn main() {
     println!("cargo:include={}", env!("CARGO_MANIFEST_DIR"));
 
     if env::var("CARGO_CFG_TARGET_OS").unwrap() == "macos" {
-        build_metal_kernels(&out_dir);
+        build_metal_kernels(out_dir);
     }
 
     if env::var("CARGO_FEATURE_CUDA").is_ok() {
-        build_cuda_kernels(&out_dir);
+        build_cuda_kernels(out_dir);
     }
 }
 
@@ -58,12 +58,12 @@ fn build_metal_kernels(out_dir: &Path) {
     let mut kids = Vec::new();
     for (src_path, out_path) in src_paths.iter().zip(air_paths.iter()) {
         let child = Command::new("xcrun")
-            .args(&["--sdk", "macosx"])
+            .args(["--sdk", "macosx"])
             .arg("metal")
             .arg("-c")
             .arg(src_path)
             .arg("-o")
-            .arg(&out_path)
+            .arg(out_path)
             .spawn()
             .unwrap();
         kids.push(child);
@@ -76,7 +76,7 @@ fn build_metal_kernels(out_dir: &Path) {
     }
 
     let result = Command::new("xcrun")
-        .args(&["--sdk", "macosx"])
+        .args(["--sdk", "macosx"])
         .arg("metallib")
         .args(air_paths)
         .arg("-o")

@@ -24,7 +24,7 @@ use sha2::{Digest, Sha256};
 const KERNELS: &[&str] = &["eval_check"];
 
 fn main() {
-    if !env::var("CARGO_FEATURE_PROVE").is_ok() {
+    if env::var("CARGO_FEATURE_PROVE").is_err() {
         return;
     }
 
@@ -34,11 +34,11 @@ fn main() {
     build_cpu_kernels();
 
     if env::var("CARGO_CFG_TARGET_OS").unwrap() == "macos" {
-        build_metal_kernels(&out_dir);
+        build_metal_kernels(out_dir);
     }
 
     if env::var("CARGO_FEATURE_CUDA").is_ok() {
-        build_cuda_kernels(&out_dir);
+        build_cuda_kernels(out_dir);
     }
 }
 
@@ -91,7 +91,7 @@ fn build_metal_kernels(out_dir: &Path) {
         let (sha, sha_hex) = compute_hash(&src_path, inc_path, &args);
         if let Ok(cached_sha) = std::fs::read(&sha_path) {
             if cached_sha == sha.as_slice() {
-                println!("Metal kernel {} ({}) up to date", kernel, sha_hex);
+                println!("Metal kernel {kernel} ({sha_hex}) up to date");
                 continue;
             }
         }
@@ -106,7 +106,7 @@ fn build_metal_kernels(out_dir: &Path) {
 
     let out_path = out_dir.join("kernels.metallib");
     let result = Command::new("xcrun")
-        .args(&["--sdk", "macosx"])
+        .args(["--sdk", "macosx"])
         .arg("metallib")
         .args(air_paths)
         .arg("-o")
@@ -120,7 +120,7 @@ fn build_metal_kernels(out_dir: &Path) {
     for src in src_paths {
         println!("cargo:rerun-if-changed={src}");
     }
-    for header in glob::glob(&inc_path).unwrap() {
+    for header in glob::glob(inc_path).unwrap() {
         let header = header.unwrap();
         let header = header.display().to_string();
         println!("cargo:rerun-if-changed={header}");
@@ -136,12 +136,12 @@ fn build_cuda_kernels(out_dir: &Path) {
     let inc_path = Path::new(&env::var("DEP_RISC0_ZKP_INCLUDE").unwrap()).join("kernels/cuda");
     let inc_path = inc_path.to_str().unwrap();
 
-    let args = ["--fatbin", &src_path, "-I", &inc_path, "-o", &out_path];
+    let args = ["--fatbin", src_path, "-I", inc_path, "-o", &out_path];
 
-    let (sha, sha_hex) = compute_hash(&src_path, inc_path, &args);
+    let (sha, sha_hex) = compute_hash(src_path, inc_path, &args);
     if let Ok(cached_sha) = std::fs::read(&sha_path) {
         if cached_sha == sha.as_slice() {
-            println!("CUDA kernel {} ({}) up to date", out_path, sha_hex);
+            println!("CUDA kernel {out_path} ({sha_hex}) up to date");
             return;
         }
     }
@@ -154,7 +154,7 @@ fn build_cuda_kernels(out_dir: &Path) {
     std::fs::write(sha_path, sha).unwrap();
 
     println!("cargo:rerun-if-changed={src_path}");
-    for header in glob::glob(&inc_path).unwrap() {
+    for header in glob::glob(inc_path).unwrap() {
         let header = header.unwrap();
         let header = header.display().to_string();
         println!("cargo:rerun-if-changed={header}");
@@ -188,7 +188,7 @@ impl Hasher {
         let digest_hex: String = digest
             .as_slice()
             .iter()
-            .map(|x| format!("{:02x}", x))
+            .map(|x| format!("{x:02x}"))
             .collect();
         (digest.to_vec(), digest_hex)
     }

@@ -41,11 +41,15 @@ use crate::{
     CIRCUIT,
 };
 
+pub(crate) type ProverOptCallback<'a> =
+    HashMap<u32, Box<dyn Fn(u32, &[u8]) -> Vec<u8> + 'a + Sync>>;
+
 /// Options available to modify the prover's behavior.
+#[derive(Default)]
 pub struct ProverOpts<'a> {
     pub(crate) skip_seal: bool,
 
-    pub(crate) sendrecv_callbacks: HashMap<u32, Box<dyn Fn(u32, &[u8]) -> Vec<u8> + 'a + Sync>>,
+    pub(crate) sendrecv_callbacks: ProverOptCallback<'a>,
 
     pub(crate) trace_callback: Option<Box<dyn FnMut(TraceEvent) -> Result<()> + 'a>>,
 }
@@ -77,19 +81,9 @@ impl<'a> ProverOpts<'a> {
         mut self,
         callback: impl FnMut(TraceEvent) -> Result<()> + 'a,
     ) -> Self {
-        assert!(!self.trace_callback.is_some(), "Duplicate trace callback");
+        assert!(self.trace_callback.is_none(), "Duplicate trace callback");
         self.trace_callback = Some(Box::new(callback));
         self
-    }
-}
-
-impl<'a> Default for ProverOpts<'a> {
-    fn default() -> ProverOpts<'a> {
-        ProverOpts {
-            skip_seal: false,
-            sendrecv_callbacks: HashMap::new(),
-            trace_callback: None,
-        }
     }
 }
 
@@ -156,7 +150,7 @@ impl<'a> Prover<'a> {
         MethodId: From<M>,
     {
         Ok(Prover {
-            elf: Program::load_elf(&elf, MEM_SIZE as u32)?,
+            elf: Program::load_elf(elf, MEM_SIZE as u32)?,
             inner: ProverImpl::new(opts),
             method_id: method_id.into(),
             cycles: 0,

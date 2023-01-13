@@ -195,7 +195,7 @@ where
         let which = hal.copy_from_u32("which", which.as_slice());
         let xs = hal.copy_from_extelem("xs", xs.as_slice());
         let out = hal.alloc_extelem("out", which.size());
-        hal.batch_evaluate_any(&pg.coeffs, pg.count, &which, &xs, &out);
+        hal.batch_evaluate_any(pg.coeffs, pg.count, &which, &xs, &out);
         out.view(|view| {
             eval_u.extend(view);
         });
@@ -230,7 +230,7 @@ where
     let out = hal.alloc_extelem("out", H::CHECK_SIZE);
     let which = hal.copy_from_u32("which", which.as_slice());
     let xs = hal.copy_from_extelem("xs", xs.as_slice());
-    hal.batch_evaluate_any(&check_group.coeffs, H::CHECK_SIZE, &which, &xs, &out);
+    hal.batch_evaluate_any(check_group.coeffs, H::CHECK_SIZE, &which, &xs, &out);
     out.view(|view| {
         coeff_u.extend(view);
     });
@@ -259,7 +259,7 @@ where
         let which_buf = hal.copy_from_u32("which", which.as_slice());
         let group_size = taps.group_size(id);
         hal.mix_poly_coeffs(
-            &combos, &cur_mix, &mix, &pg.coeffs, &which_buf, group_size, size,
+            &combos, &cur_mix, &mix, pg.coeffs, &which_buf, group_size, size,
         );
         cur_mix *= mix.pow(group_size);
     };
@@ -274,7 +274,7 @@ where
         &combos,
         &cur_mix,
         &mix,
-        &check_group.coeffs,
+        check_group.coeffs,
         &which_buf,
         H::CHECK_SIZE,
         size,

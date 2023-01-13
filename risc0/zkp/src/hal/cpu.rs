@@ -55,6 +55,12 @@ impl<E: Elem, EE: ExtElem> CpuHal<E, EE> {
     }
 }
 
+impl<E: Elem, EE: ExtElem> Default for CpuHal<E, EE> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Clone)]
 struct Region(usize, usize);
 
@@ -98,7 +104,7 @@ impl<T: Default + Clone + Pod> CpuBuffer<T> {
         }
     }
 
-    pub fn as_slice<'a>(&'a self) -> Ref<'a, [T]> {
+    pub fn as_slice(&self) -> Ref<[T]> {
         let vec = self.buf.borrow();
         Ref::map(vec, |vec| {
             let slice = bytemuck::cast_slice(vec);
@@ -106,7 +112,7 @@ impl<T: Default + Clone + Pod> CpuBuffer<T> {
         })
     }
 
-    pub fn as_slice_mut<'a>(&'a self) -> RefMut<'a, [T]> {
+    pub fn as_slice_mut(&self) -> RefMut<[T]> {
         let vec = self.buf.borrow_mut();
         RefMut::map(vec, |vec| {
             let slice = bytemuck::cast_slice_mut(vec);
@@ -287,7 +293,7 @@ where
                 let pos = idx & ((1 << bits) - 1);
                 let rev = bit_rev_32(pos as u32) >> (32 - bits);
                 let pow3 = Self::Elem::from_u64(3).pow(rev as usize);
-                *io = *io * pow3;
+                *io *= pow3;
             });
     }
 
@@ -520,7 +526,7 @@ mod tests {
         output.view(|view| {
             assert_eq!(expected.len(), view.len());
             for (expected, actual) in expected.iter().zip(view) {
-                assert_eq!(Digest::from_str(expected), *actual);
+                assert_eq!(Digest::from(*expected), *actual);
             }
         });
     }

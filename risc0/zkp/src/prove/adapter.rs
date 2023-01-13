@@ -102,8 +102,7 @@ where
             (0..self.steps - ZK_CYCLES).into_par_iter().for_each_init(
                 || Handler::<F>::new(&accum),
                 |accum_handler, cycle| {
-                    let args: &mut [&mut [F::Elem]] =
-                        unsafe { &mut *args_ptr.load(Ordering::Relaxed) };
+                    let args: &mut [&mut [F::Elem]] = unsafe { *args_ptr.load(Ordering::Relaxed) };
                     c.step_compute_accum(
                         &CircuitStepContext {
                             size: self.steps,

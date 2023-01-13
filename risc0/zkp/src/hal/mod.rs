@@ -77,6 +77,7 @@ pub trait Hal {
 
     fn zk_shift(&self, io: &Self::BufferElem, count: usize);
 
+    #[allow(clippy::too_many_arguments)]
     fn mix_poly_coeffs(
         &self,
         out: &Self::BufferExtElem,
@@ -108,6 +109,7 @@ pub trait Hal {
 
 pub trait EvalCheck<H: Hal> {
     /// Compute check polynomial.
+    #[allow(clippy::too_many_arguments)]
     fn eval_check(
         &self,
         check: &H::BufferElem,

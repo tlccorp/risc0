@@ -126,7 +126,7 @@ impl<'de> Deserializer<'de> {
     }
 
     fn try_take_word(&mut self) -> Result<u32> {
-        if self.slice.len() >= 1 {
+        if !self.slice.is_empty() {
             let (head, tail) = self.slice.split_first().unwrap();
             self.slice = tail;
             Ok(*head)
@@ -273,7 +273,7 @@ impl<'de, 'a> serde::Deserializer<'de> for &'a mut Deserializer<'de> {
         // this handles transforming the array of code units to a
         // codepoint. we can't use char::from_u32() because it expects
         // an already-processed codepoint.
-        let character = core::str::from_utf8(&bytes)
+        let character = core::str::from_utf8(bytes)
             .map_err(|_| Error::DeserializeBadChar)?
             .chars()
             .next()

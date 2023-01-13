@@ -53,7 +53,7 @@ fn stdio_outputs_in_receipt() -> Result<()> {
         .success();
 
     let receipt = load_receipt(&receipt_file);
-    assert!(insecure_skip_seal() || receipt.get_seal_bytes().len() > 0);
+    assert!(insecure_skip_seal() || !receipt.get_seal_bytes().is_empty());
     receipt.verify(risc0_zkvm_methods::STANDARD_LIB_ID).unwrap();
 
     Ok(())
