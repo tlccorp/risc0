@@ -172,9 +172,7 @@ fn fail() {
     let mut prover = Prover::new(MULTI_TEST_ELF, MULTI_TEST_ID).unwrap();
     prover.add_input_u32_slice(&to_vec(&MultiTestSpec::Fail).unwrap());
 
-    assert!(unwrap_err(prover.run())
-        .to_string()
-        .contains("MultiTestSpec::Fail invoked"));
+    assert!(unwrap_err(prover.run()).contains("MultiTestSpec::Fail invoked"));
 }
 
 #[test]
@@ -347,11 +345,11 @@ fn profiler() {
                 }] => {
                     println!("Inspecting frames:\n{fr1:?}\n{fr2:?}\n");
                     if name1 != "profile_test_func2" || name2 != "profile_test_func1" {
-                        println!("Names did not match: {}, {}", name1, name2);
+                        println!("Names did not match: {name1}, {name2}");
                         return false;
                     }
                     if !fn1.ends_with("multi_test.rs") || !fn2.ends_with("multi_test.rs") {
-                        println!("Filenames did not match: {}, {}", fn1, fn2);
+                        println!("Filenames did not match: {fn1}, {fn2}");
                         return false;
                     }
                     // Check to make sure we hit the "nop" instruction
@@ -371,7 +369,7 @@ fn profiler() {
                     true
                 }
                 _ => {
-                    println!("{:#?}", fr);
+                    println!("{fr:#?}");
                     false
                 }
             }
@@ -387,7 +385,10 @@ fn trace() {
     {
         let opts = ProverOpts::default()
             .with_skip_seal(true)
-            .with_trace_callback(|event| Ok(events.push(event)));
+            .with_trace_callback(|event| {
+                events.push(event);
+                Ok(())
+            });
         let mut prover = Prover::new_with_opts(MULTI_TEST_ELF, MULTI_TEST_ID, opts).unwrap();
         prover.add_input_u32_slice(&to_vec(&MultiTestSpec::EventTrace).unwrap());
 
@@ -412,7 +413,7 @@ fn trace() {
                 value: 1337,
             }] = window
             {
-                assert_eq!(cycle1 + 1, cycle2, "li should take 1 cycles: {:#?}", window);
+                assert_eq!(cycle1 + 1, cycle2, "li should take 1 cycles: {window:#?}");
                 assert_eq!(
                     pc1 + WORD_SIZE as u32,
                     pc2,

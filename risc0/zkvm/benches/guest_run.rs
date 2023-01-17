@@ -91,7 +91,7 @@ pub fn bench(c: &mut Criterion) {
         hash_raw_words_group.throughput(Throughput::Bytes(buf_bytes));
         hash_raw_words_group.bench_function(BenchmarkId::from_parameter(buf_bytes), |b| {
             let buf: Vec<u32> = rand_buffer((buf_bytes / 4) as usize);
-            guest_iter(b, BenchmarkSpec::HashRawWords { buf: buf.clone() })
+            guest_iter(b, BenchmarkSpec::HashRawWords { buf })
         });
     }
     hash_raw_words_group.finish();
@@ -129,7 +129,7 @@ pub fn bench(c: &mut Criterion) {
                 guest_iter(
                     b,
                     BenchmarkSpec::Memcpy {
-                        src: buf.clone(),
+                        src: buf,
                         src_align: 0,
                         dst_align: 0,
                     },
@@ -146,7 +146,7 @@ pub fn bench(c: &mut Criterion) {
                 guest_iter(
                     b,
                     BenchmarkSpec::Memcpy {
-                        src: buf.clone(),
+                        src: buf,
                         src_align: 1,
                         dst_align: 0,
                     },
@@ -163,7 +163,7 @@ pub fn bench(c: &mut Criterion) {
                 guest_iter(
                     b,
                     BenchmarkSpec::Memcpy {
-                        src: buf.clone(),
+                        src: buf,
                         src_align: 0,
                         dst_align: 3,
                     },
@@ -180,7 +180,7 @@ pub fn bench(c: &mut Criterion) {
                 guest_iter(
                     b,
                     BenchmarkSpec::Memcpy {
-                        src: buf.clone(),
+                        src: buf,
                         src_align: 1,
                         dst_align: 3,
                     },

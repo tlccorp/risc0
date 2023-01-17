@@ -190,9 +190,9 @@ mod tests {
         for _query in 0..queries {
             let r_idx = (iop.rng.next_u32() as usize) % rows;
             let col = prover.prove(&mut iop, r_idx);
-            for c_idx in 0..cols {
+            for (c_idx, elm) in col.iter().enumerate().take(cols) {
                 assert_eq!(
-                    col[c_idx],
+                    *elm,
                     BabyBearElem::from_u64((u32::MAX / 2) as u64 - ((r_idx + c_idx * rows) as u64))
                 );
             }
@@ -211,28 +211,24 @@ mod tests {
                 let r_idx = (r_iop.next_u32() as usize) % rows;
                 if query == bad_query {
                     if rows == 1 {
-                        assert!(false, "Cannot test for bad query if there is only one row");
+                        panic!("Cannot test for bad query if there is only one row");
                     }
                     let r_idx = (r_idx + 1) % rows;
                     let verification = verifier.verify(&mut r_iop, r_idx);
                     match verification {
-                        Ok(_) => assert!(
-                            false,
-                            "Merkle tree wrongly passed verify when tested on the wrong row"
-                        ),
+                        Ok(_) => {
+                            panic!("Merkle tree wrongly passed verify when tested on the wrong row")
+                        }
                         Err(VerificationError::InvalidProof) => {}
-                        Err(_) => assert!(
-                            false,
-                            "Merkle tree failed validation for an unexpected reason"
-                        ),
+                        Err(_) => panic!("Merkle tree failed validation for an unexpected reason"),
                     }
                     err = true;
                     break;
                 }
                 let col = verifier.verify(&mut r_iop, r_idx).unwrap();
-                for c_idx in 0..cols {
+                for (c_idx, elm) in col.iter().enumerate().take(cols) {
                     assert_eq!(
-                        col[c_idx],
+                        *elm,
                         BabyBearElem::from((u32::MAX / 2) - ((r_idx + c_idx * rows) as u32))
                     );
                 }
