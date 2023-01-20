@@ -13,6 +13,7 @@
 // limitations under the License.
 
 pub(crate) mod elf;
+mod emu;
 mod exec;
 pub(crate) mod image;
 pub(crate) mod loader;
