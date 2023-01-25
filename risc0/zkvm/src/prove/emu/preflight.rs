@@ -300,7 +300,6 @@ impl Preflight {
 }
 
 #[cfg(test)]
-
 mod tests {
     use std::path::Path;
 

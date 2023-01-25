@@ -5,6 +5,7 @@ members = [
   "risc0/build",
   "risc0/circuit/rv32im",
   "risc0/r0vm",
+  "risc0/riscv_tests",
   "risc0/tools",
   "risc0/zeroio",
   "risc0/zeroio_derive",

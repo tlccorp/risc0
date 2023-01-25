@@ -18,9 +18,10 @@ use core::mem::size_of;
 use std::collections::HashMap;
 
 use insn::{Insn, InsnKind};
-use risc0_zkp::field::baby_bear::BabyBearElem;
 use risc0_zkvm_platform::{memory::SYSTEM, WORD_SIZE};
 use snafu::prelude::*;
+
+const HALF_SIZE: usize = size_of::<u16>();
 
 #[derive(Debug, Snafu, PartialEq)]
 pub enum Exception {
@@ -33,8 +34,6 @@ pub enum Exception {
     #[snafu(display("unaligned memory access: 0x{addr:08x}"))]
     UnalignedAccess { addr: u32 },
 }
-
-const HALF_SIZE: usize = size_of::<u16>();
 
 pub struct Bus {
     ram: Vec<u8>,
@@ -610,6 +609,10 @@ mod tests {
         //   ALU output = 0xFF1EFE44, EQ:0, LT:0, LTU:0
         let core = Core::new();
         let insn = core.decode(0xE45FF06F).unwrap();
+        debug!("{insn:x?}");
+        assert_eq!(insn.parts.1, 0xfffffe44);
+
+        let insn = core.decode(0x0200a283).unwrap();
         debug!("{insn:x?}");
         assert_eq!(insn.parts.1, 0xfffffe44);
     }
