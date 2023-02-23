@@ -35,7 +35,7 @@ use risc0_zkvm_platform::{
     memory::{FFPU, SYSTEM},
     syscall::{
         ecall,
-        nr::{SYS_COMPUTE_POLY, SYS_CYCLE_COUNT, SYS_IO, SYS_LOG, SYS_PANIC},
+        nr::{SYS_COMPUTE_POLY, SYS_CYCLE_COUNT, SYS_IO, SYS_LOG, SYS_PANIC, SYS_RAND},
         reg_abi::{REG_A0, REG_A1, REG_A2, REG_A3, REG_A4, REG_A7, REG_T0},
         DIGEST_WORDS,
     },
@@ -831,6 +831,18 @@ impl<'a, H: HostHandler> MachineContext<'a, H> {
                 let words = result.tot.to_u32_words();
                 self.memory.store_region_u32(result_ptr, &words);
                 Ok((split_word8(words.len() as u32), split_word8(0)))
+            }
+            SYS_RAND => {
+                let buf_ptr = self.memory.load_register(REG_A0);
+                let buf_len = self.memory.load_register(REG_A1);
+                debug!("SYS_RAND[{cycle}]");
+
+                let mut buf = self.memory.load_region(buf_ptr, buf_len);
+                getrandom::getrandom(buf.as_mut_slice())?;
+
+                self.memory.store_region(buf_ptr, &buf);
+
+                Ok((split_word8(buf_ptr as u32), split_word8(0)))
             }
             _ => bail!("Unsupported syscall: {nr}"),
         }
