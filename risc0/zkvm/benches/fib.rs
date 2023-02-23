@@ -1,4 +1,4 @@
-// Copyright 2022 RISC Zero, Inc.
+// Copyright 2023 RISC Zero, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -53,26 +53,6 @@ pub fn bench(c: &mut Criterion) {
                 },
             );
         }
-    }
-
-    #[cfg(feature = "metal")]
-    for iterations in [100, 200] {
-        let hal = std::rc::Rc::new(risc0_zkp::hal::metal::MetalHal::new());
-        let eval = risc0_circuit_rv32im::metal::MetalEvalCheck::new(hal.clone());
-        let cycles = prover_run(&mut prover_setup(iterations, true));
-        group.sample_size(10);
-        group.throughput(Throughput::Elements(cycles as u64));
-        group.bench_with_input(
-            BenchmarkId::from_parameter(format!("metal/{:?}", (iterations, true))),
-            &iterations,
-            |b, &iterations| {
-                b.iter_batched(
-                    || prover_setup(iterations, true),
-                    |mut prover| black_box(prover.run_with_hal(hal.as_ref(), &eval).unwrap()),
-                    BatchSize::SmallInput,
-                )
-            },
-        );
     }
 
     group.finish();

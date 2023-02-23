@@ -1,4 +1,4 @@
-// Copyright 2022 RISC Zero, Inc.
+// Copyright 2023 RISC Zero, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,10 +14,8 @@
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use rand::thread_rng;
-use risc0_zkp::{
-    core::ntt::interpolate_ntt,
-    field::{baby_bear::BabyBearElem, Elem},
-};
+use risc0_core::field::{baby_bear::BabyBearElem, Elem};
+use risc0_zkp::core::ntt::interpolate_ntt;
 
 pub fn ntt(c: &mut Criterion) {
     let mut group = c.benchmark_group("interpolate_ntt");

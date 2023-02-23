@@ -1,4 +1,4 @@
-// Copyright 2022 RISC Zero, Inc.
+// Copyright 2023 RISC Zero, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,29 +15,33 @@
 use std::rc::Rc;
 
 use metal::ComputePipelineDescriptor;
+use risc0_core::field::{
+    baby_bear::{BabyBearElem, BabyBearExtElem},
+    RootsOfUnity,
+};
 use risc0_zkp::{
     core::log2_ceil,
-    field::{
-        baby_bear::{BabyBearElem, BabyBearExtElem},
-        RootsOfUnity,
-    },
     hal::{
-        metal::{BufferImpl as MetalBuffer, MetalHal},
+        metal::{BufferImpl as MetalBuffer, MetalHal, MetalHash, MetalHashSha256},
         EvalCheck,
     },
     INV_RATE,
 };
 
-const METAL_LIB: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/kernels.metallib"));
+const METAL_LIB: &[u8] = include_bytes!(env!("RV32IM_METAL_PATH"));
+
+use crate::{
+    GLOBAL_MIX, GLOBAL_OUT, REGISTER_GROUP_ACCUM, REGISTER_GROUP_CODE, REGISTER_GROUP_DATA,
+};
 
 #[derive(Debug)]
-pub struct MetalEvalCheck {
-    hal: Rc<MetalHal>,
+pub struct MetalEvalCheck<MH: MetalHash> {
+    hal: Rc<MetalHal<MH>>,
     kernel: ComputePipelineDescriptor,
 }
 
-impl MetalEvalCheck {
-    pub fn new(hal: Rc<MetalHal>) -> Self {
+impl<MH: MetalHash> MetalEvalCheck<MH> {
+    pub fn new(hal: Rc<MetalHal<MH>>) -> Self {
         let library = hal.device.new_library_with_data(METAL_LIB).unwrap();
         let function = library.get_function("eval_check", None).unwrap();
         let kernel = ComputePipelineDescriptor::new();
@@ -46,16 +50,15 @@ impl MetalEvalCheck {
     }
 }
 
-impl EvalCheck<MetalHal> for MetalEvalCheck {
+pub type MetalEvalCheckSha256 = MetalEvalCheck<MetalHashSha256>;
+
+impl<MH: MetalHash> EvalCheck<MetalHal<MH>> for MetalEvalCheck<MH> {
     #[tracing::instrument(skip_all)]
     fn eval_check(
         &self,
         check: &MetalBuffer<BabyBearElem>,
-        code: &MetalBuffer<BabyBearElem>,
-        data: &MetalBuffer<BabyBearElem>,
-        accum: &MetalBuffer<BabyBearElem>,
-        mix: &MetalBuffer<BabyBearElem>,
-        out: &MetalBuffer<BabyBearElem>,
+        groups: &[&MetalBuffer<BabyBearElem>],
+        globals: &[&MetalBuffer<BabyBearElem>],
         poly_mix: BabyBearExtElem,
         po2: usize,
         steps: usize,
@@ -75,11 +78,11 @@ impl EvalCheck<MetalHal> for MetalEvalCheck {
         );
         let buffers = &[
             check.as_arg(),
-            code.as_arg(),
-            data.as_arg(),
-            accum.as_arg(),
-            mix.as_arg(),
-            out.as_arg(),
+            groups[REGISTER_GROUP_CODE].as_arg(),
+            groups[REGISTER_GROUP_DATA].as_arg(),
+            groups[REGISTER_GROUP_ACCUM].as_arg(),
+            globals[GLOBAL_MIX].as_arg(),
+            globals[GLOBAL_OUT].as_arg(),
             poly_mix.as_arg(),
             rou.as_arg(),
             po2.as_arg(),
@@ -94,7 +97,7 @@ impl EvalCheck<MetalHal> for MetalEvalCheck {
 mod tests {
     use std::rc::Rc;
 
-    use risc0_zkp::hal::{cpu::BabyBearCpuHal, metal::MetalHal};
+    use risc0_zkp::hal::{cpu::BabyBearSha256CpuHal, metal::MetalHalSha256};
     use test_log::test;
 
     use crate::cpu::CpuEvalCheck;
@@ -106,9 +109,9 @@ mod tests {
         // The number of cycles, choose a number that doesn't make tests take too long.
         const PO2: usize = 4;
         let circuit = crate::CircuitImpl::new();
-        let cpu_hal = BabyBearCpuHal::new();
+        let cpu_hal = BabyBearSha256CpuHal::new();
         let cpu_eval = CpuEvalCheck::new(&circuit);
-        let gpu_hal = Rc::new(MetalHal::new());
+        let gpu_hal = Rc::new(MetalHalSha256::new());
         let gpu_eval = super::MetalEvalCheck::new(gpu_hal.clone());
         crate::testutil::eval_check(&cpu_hal, cpu_eval, gpu_hal.as_ref(), gpu_eval, PO2);
     }

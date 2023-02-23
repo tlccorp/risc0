@@ -1,4 +1,4 @@
-// Copyright 2022 RISC Zero, Inc.
+// Copyright 2023 RISC Zero, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,10 +14,8 @@
 
 use std::collections::VecDeque;
 
-use risc0_zkp::{
-    field::{self, Elem, ExtElem},
-    MAX_CYCLES,
-};
+use risc0_core::field::{self, Elem, ExtElem};
+use risc0_zkp::MAX_CYCLES;
 use risc0_zkvm_platform::{memory, WORD_SIZE};
 
 // Main RAM plonk rows have the following 7 plonk elements:
@@ -25,7 +23,7 @@ use risc0_zkvm_platform::{memory, WORD_SIZE};
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 struct MainRamPlonkRow {
     addr: u32,
-    // (cycle << 1) | is_write
+    // (cycle << 2) | mem_op
     cycle_and_write_flag: u32,
     val: u32,
 }
@@ -35,7 +33,7 @@ struct MainRamPlonkRow {
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 struct FfpuRamPlonkRow {
     addr: u32,
-    // (cycle << 1) | is_write
+    // (cycle << 2) | mem_op
     cycle_and_write_flag: u32,
     val: [u32; 4],
 }
@@ -48,7 +46,7 @@ pub struct RamPlonk {
 impl RamPlonk {
     pub fn new() -> Self {
         // Make sure cycle_and_write_flag won't overflow
-        assert!(MAX_CYCLES < ((u32::MAX as usize) << 1));
+        assert!(MAX_CYCLES < ((u32::MAX as usize) << 2));
 
         RamPlonk {
             main_ram: Vec::new(),
@@ -63,9 +61,9 @@ impl RamPlonk {
     {
         let addr = u32::from(elems[0]);
         let cycle = u32::from(elems[1]);
-        let is_write = u32::from(elems[2]);
-        debug_assert!(is_write < 2);
-        let cycle_and_write_flag = (cycle << 1) + is_write;
+        let mem_op = u32::from(elems[2]);
+        debug_assert!(mem_op < 4);
+        let cycle_and_write_flag = (cycle << 2) + mem_op;
 
         if addr < (memory::FFPU.start() / WORD_SIZE) as u32 {
             for elem in &elems[3..] {
@@ -104,8 +102,8 @@ impl RamPlonk {
         };
         if let Some(row) = self.main_ram.pop() {
             set_elem(0, row.addr);
-            set_elem(1, row.cycle_and_write_flag >> 1);
-            set_elem(2, row.cycle_and_write_flag & 1);
+            set_elem(1, row.cycle_and_write_flag >> 2);
+            set_elem(2, row.cycle_and_write_flag & 3);
             set_elem(3, (row.val >> 0) & 0xFF);
             set_elem(4, (row.val >> 8) & 0xFF);
             set_elem(5, (row.val >> 16) & 0xFF);
@@ -113,8 +111,8 @@ impl RamPlonk {
         } else {
             let row = self.ffpu_ram.pop().unwrap();
             set_elem(0, row.addr);
-            set_elem(1, row.cycle_and_write_flag >> 1);
-            set_elem(2, row.cycle_and_write_flag & 1);
+            set_elem(1, row.cycle_and_write_flag >> 2);
+            set_elem(2, row.cycle_and_write_flag & 3);
             set_elem(3, row.val[0]);
             set_elem(4, row.val[1]);
             set_elem(5, row.val[2]);

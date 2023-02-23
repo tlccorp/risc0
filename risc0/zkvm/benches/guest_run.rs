@@ -1,4 +1,4 @@
-// Copyright 2022 RISC Zero, Inc.
+// Copyright 2023 RISC Zero, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -82,19 +82,6 @@ pub fn bench(c: &mut Criterion) {
         });
     }
     hash_bytes_group.finish();
-
-    let mut hash_raw_words_group = c.benchmark_group("hash_raw_words");
-    hash_raw_words_group
-        .sampling_mode(SamplingMode::Flat)
-        .measurement_time(Duration::new(20, 0));
-    for buf_bytes in [0u64, 64, 512, 2048, 8192] {
-        hash_raw_words_group.throughput(Throughput::Bytes(buf_bytes));
-        hash_raw_words_group.bench_function(BenchmarkId::from_parameter(buf_bytes), |b| {
-            let buf: Vec<u32> = rand_buffer((buf_bytes / 4) as usize);
-            guest_iter(b, BenchmarkSpec::HashRawWords { buf })
-        });
-    }
-    hash_raw_words_group.finish();
 
     let mut memset_group = c.benchmark_group("memset");
     memset_group.sampling_mode(SamplingMode::Flat);

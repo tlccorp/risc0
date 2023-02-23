@@ -1,4 +1,4 @@
-// Copyright 2022 RISC Zero, Inc.
+// Copyright 2023 RISC Zero, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 pub const SENDRECV_CHANNEL_INITIAL_INPUT: u32 = 0;
 pub const SENDRECV_CHANNEL_STDOUT: u32 = 1;
 pub const SENDRECV_CHANNEL_STDERR: u32 = 2;
+pub const SENDRECV_CHANNEL_JOURNAL: u32 = 3;
 
 #[repr(C)]
 pub struct SliceDescriptor {

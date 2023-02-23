@@ -1,4 +1,4 @@
-// Copyright 2022 RISC Zero, Inc.
+// Copyright 2023 RISC Zero, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,34 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use rand_core::{Error, RngCore};
+use core::marker::PhantomData;
 
-use crate::{
-    core::{
-        sha::{Digest, Sha},
-        sha_rng::ShaRng,
-    },
-    field::{self},
-};
+use risc0_core::field::{Elem, Field};
+
+use crate::core::{config::ConfigRng, sha::Digest};
 
 #[derive(Debug)]
-pub struct ReadIOP<'a, S: Sha + 'a> {
-    sha: S,
+pub struct ReadIOP<'a, F: Field, R: ConfigRng<F>> {
     proof: &'a [u32],
-    rng: ShaRng<S>,
+    rng: R,
+    phantom: PhantomData<F>,
 }
 
-impl<'a, S: Sha + 'a> ReadIOP<'a, S> {
-    pub fn new(sha: &'a S, proof: &'a [u32]) -> Self {
+impl<'a, F: Field, R: ConfigRng<F>> ReadIOP<'a, F, R> {
+    pub fn new(proof: &'a [u32]) -> Self {
         ReadIOP {
-            sha: sha.clone(),
             proof,
-            rng: ShaRng::new(sha),
+            rng: R::new(),
+            phantom: PhantomData,
         }
-    }
-
-    pub fn get_sha(&self) -> &S {
-        &self.sha
     }
 
     pub fn read_u32s(&mut self, n: usize) -> &'a [u32] {
@@ -50,7 +42,7 @@ impl<'a, S: Sha + 'a> ReadIOP<'a, S> {
 
     /// Read some field elements from this IOP, and check to make sure
     /// they're not INVALID.
-    pub fn read_field_elem_slice<T: field::Elem>(&mut self, n: usize) -> &'a [T] {
+    pub fn read_field_elem_slice<T: Elem>(&mut self, n: usize) -> &'a [T] {
         let u32s = self.read_u32s(n * T::WORDS);
         T::from_u32_slice(u32s)
     }
@@ -74,22 +66,19 @@ impl<'a, S: Sha + 'a> ReadIOP<'a, S> {
     pub fn verify_complete(&self) {
         assert_eq!(self.proof.len(), 0);
     }
-}
 
-impl<'a, S: Sha> RngCore for ReadIOP<'a, S> {
-    fn next_u32(&mut self) -> u32 {
-        self.rng.next_u32()
+    /// Get a cryptographically uniform u32
+    pub fn random_u32(&mut self) -> u32 {
+        self.rng.random_u32()
     }
 
-    fn next_u64(&mut self) -> u64 {
-        self.rng.next_u64()
+    /// Get a cryptographically uniform field element
+    pub fn random_elem(&mut self) -> F::Elem {
+        self.rng.random_elem()
     }
 
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
-        self.rng.fill_bytes(dest)
-    }
-
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Error> {
-        self.rng.try_fill_bytes(dest)
+    /// Get a cryptographically uniform extension field element
+    pub fn random_ext_elem(&mut self) -> F::ExtElem {
+        self.rng.random_ext_elem()
     }
 }

@@ -1,4 +1,4 @@
-// Copyright 2022 RISC Zero, Inc.
+// Copyright 2023 RISC Zero, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -99,10 +99,14 @@ where
 {
     type Elem = U::Elem;
     type ExtElem = U::ExtElem;
+    type Field = U::Field;
     type BufferDigest = BufferImpl<Digest, U::BufferDigest, V::BufferDigest>;
     type BufferElem = BufferImpl<Self::Elem, U::BufferElem, V::BufferElem>;
     type BufferExtElem = BufferImpl<Self::ExtElem, U::BufferExtElem, V::BufferExtElem>;
     type BufferU32 = BufferImpl<u32, U::BufferU32, V::BufferU32>;
+    type HashSuite = U::HashSuite;
+    type Hash = U::Hash;
+    type Rng = U::Rng;
 
     fn alloc_digest(&self, name: &'static str, size: usize) -> Self::BufferDigest {
         let buf1 = self.hal1.alloc_digest(name, size);
@@ -284,15 +288,15 @@ where
         output.assert_eq();
     }
 
-    fn sha_rows(&self, output: &Self::BufferDigest, matrix: &Self::BufferElem) {
-        self.hal1.sha_rows(&output.buf1, &matrix.buf1);
-        self.hal2.sha_rows(&output.buf2, &matrix.buf2);
+    fn hash_rows(&self, output: &Self::BufferDigest, matrix: &Self::BufferElem) {
+        self.hal1.hash_rows(&output.buf1, &matrix.buf1);
+        self.hal2.hash_rows(&output.buf2, &matrix.buf2);
         output.assert_eq();
     }
 
-    fn sha_fold(&self, io: &Self::BufferDigest, input_size: usize, output_size: usize) {
-        self.hal1.sha_fold(&io.buf1, input_size, output_size);
-        self.hal2.sha_fold(&io.buf2, input_size, output_size);
+    fn hash_fold(&self, io: &Self::BufferDigest, input_size: usize, output_size: usize) {
+        self.hal1.hash_fold(&io.buf1, input_size, output_size);
+        self.hal2.hash_fold(&io.buf2, input_size, output_size);
         io.assert_eq();
     }
 }
@@ -332,33 +336,28 @@ where
     fn eval_check(
         &self,
         check: &<DualHal<H1, H2> as Hal>::BufferElem,
-        code: &<DualHal<H1, H2> as Hal>::BufferElem,
-        data: &<DualHal<H1, H2> as Hal>::BufferElem,
-        accum: &<DualHal<H1, H2> as Hal>::BufferElem,
-        mix: &<DualHal<H1, H2> as Hal>::BufferElem,
-        out: &<DualHal<H1, H2> as Hal>::BufferElem,
+        groups: &[&<DualHal<H1, H2> as Hal>::BufferElem],
+        globals: &[&<DualHal<H1, H2> as Hal>::BufferElem],
         poly_mix: <DualHal<H1, H2> as Hal>::ExtElem,
         po2: usize,
         steps: usize,
     ) {
+        let groups1: Vec<&_> = groups.iter().map(|g| &g.buf1).collect();
+        let groups2: Vec<&_> = groups.iter().map(|g| &g.buf2).collect();
+        let globals1: Vec<&_> = globals.iter().map(|g| &g.buf1).collect();
+        let globals2: Vec<&_> = globals.iter().map(|g| &g.buf2).collect();
         self.eval1.eval_check(
             &check.buf1,
-            &code.buf1,
-            &data.buf1,
-            &accum.buf1,
-            &mix.buf1,
-            &out.buf1,
+            groups1.as_slice(),
+            globals1.as_slice(),
             poly_mix,
             po2,
             steps,
         );
         self.eval2.eval_check(
             &check.buf2,
-            &code.buf2,
-            &data.buf2,
-            &accum.buf2,
-            &mix.buf2,
-            &out.buf2,
+            groups2.as_slice(),
+            globals2.as_slice(),
             bytemuck::cast(poly_mix),
             po2,
             steps,

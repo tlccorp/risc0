@@ -1,4 +1,4 @@
-// Copyright 2022 RISC Zero, Inc.
+// Copyright 2023 RISC Zero, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub(crate) mod elf;
+//! Run the zkVM guest and prove its results
+
 mod exec;
-pub(crate) mod image;
 pub(crate) mod loader;
 mod plonk;
 #[cfg(feature = "profiler")]
@@ -23,21 +23,26 @@ pub mod profiler;
 use std::{collections::HashMap, fmt::Debug, io::Write, rc::Rc};
 
 use anyhow::{bail, Result};
+use risc0_circuit_rv32im::{REGISTER_GROUP_ACCUM, REGISTER_GROUP_CODE, REGISTER_GROUP_DATA};
+use risc0_core::field::baby_bear::{BabyBear, BabyBearElem, BabyBearExtElem};
 use risc0_zkp::{
-    field::baby_bear::{BabyBearElem, BabyBearExtElem},
+    adapter::TapsProvider,
+    core::sha::Digest,
     hal::{EvalCheck, Hal},
     prove::adapter::ProveAdapter,
 };
 use risc0_zkvm_platform::{
-    io::{SENDRECV_CHANNEL_INITIAL_INPUT, SENDRECV_CHANNEL_STDERR, SENDRECV_CHANNEL_STDOUT},
+    io::{
+        SENDRECV_CHANNEL_INITIAL_INPUT, SENDRECV_CHANNEL_JOURNAL, SENDRECV_CHANNEL_STDERR,
+        SENDRECV_CHANNEL_STDOUT,
+    },
     memory::MEM_SIZE,
+    WORD_SIZE,
 };
 
-use self::elf::Program;
+use crate::binfmt::elf::Program;
 use crate::{
-    method_id::MethodId,
     receipt::{insecure_skip_seal, Receipt},
-    sha::sha,
     CIRCUIT,
 };
 
@@ -48,6 +53,8 @@ pub(crate) type ProverOptCallback<'a> =
 #[derive(Default)]
 pub struct ProverOpts<'a> {
     pub(crate) skip_seal: bool,
+
+    pub(crate) skip_verify: bool,
 
     pub(crate) sendrecv_callbacks: ProverOptCallback<'a>,
 
@@ -61,6 +68,16 @@ impl<'a> ProverOpts<'a> {
     /// verify the execution.
     pub fn with_skip_seal(self, skip_seal: bool) -> Self {
         Self { skip_seal, ..self }
+    }
+
+    /// If true, don't verify the seal after creating it.  This
+    /// is useful if you wish to use a non-standard verifier for
+    /// example.
+    pub fn with_skip_verify(self, skip_verify: bool) -> Self {
+        Self {
+            skip_verify,
+            ..self
+        }
     }
 
     /// Add a callback handler for sendrecv ports, indexed by channel
@@ -87,10 +104,22 @@ impl<'a> ProverOpts<'a> {
     }
 }
 
+impl<'a> Default for ProverOpts<'a> {
+    fn default() -> ProverOpts<'a> {
+        ProverOpts {
+            skip_seal: false,
+            skip_verify: false,
+            sendrecv_callbacks: HashMap::new(),
+            trace_callback: None,
+        }
+    }
+}
+
+/// Manages communication with and execution of a zkVM [Program]
 pub struct Prover<'a> {
     elf: Program,
     inner: ProverImpl<'a>,
-    method_id: MethodId,
+    image_id: Digest,
     pub cycles: usize,
 }
 
@@ -99,38 +128,26 @@ cfg_if::cfg_if! {
         use risc0_circuit_rv32im::cuda::CudaEvalCheck;
         use risc0_zkp::hal::cuda::CudaHal;
 
-        thread_local! {
-            static HAL: (Rc<CudaHal>, CudaEvalCheck) = default_hal();
-        }
-
         pub fn default_hal() -> (Rc<CudaHal>, CudaEvalCheck) {
             let hal = Rc::new(CudaHal::new());
             let eval = CudaEvalCheck::new(hal.clone());
             (hal, eval)
         }
     } else if #[cfg(feature = "metal")] {
-        use risc0_circuit_rv32im::metal::MetalEvalCheck;
-        use risc0_zkp::hal::metal::MetalHal;
+        use risc0_circuit_rv32im::metal::MetalEvalCheckSha256;
+        use risc0_zkp::hal::metal::MetalHalSha256;
 
-        thread_local! {
-            static HAL: (Rc<MetalHal>, MetalEvalCheck) = default_hal();
-        }
-
-        pub fn default_hal() -> (Rc<MetalHal>, MetalEvalCheck) {
-            let hal = Rc::new(MetalHal::new());
-            let eval = MetalEvalCheck::new(hal.clone());
+        pub fn default_hal() -> (Rc<MetalHalSha256>, MetalEvalCheckSha256) {
+            let hal = Rc::new(MetalHalSha256::new());
+            let eval = MetalEvalCheckSha256::new(hal.clone());
             (hal, eval)
         }
     } else {
         use risc0_circuit_rv32im::{CircuitImpl, cpu::CpuEvalCheck};
-        use risc0_zkp::hal::cpu::BabyBearCpuHal;
+        use risc0_zkp::hal::cpu::BabyBearSha256CpuHal;
 
-        thread_local! {
-            static HAL: (Rc<BabyBearCpuHal>, CpuEvalCheck<'static, CircuitImpl>) = default_hal();
-        }
-
-        pub fn default_hal() -> (Rc<BabyBearCpuHal>, CpuEvalCheck<'static, CircuitImpl>) {
-            let hal = Rc::new(BabyBearCpuHal::new());
+        pub fn default_hal() -> (Rc<BabyBearSha256CpuHal>, CpuEvalCheck<'static, CircuitImpl>) {
+            let hal = Rc::new(BabyBearSha256CpuHal::new());
             let eval = CpuEvalCheck::new(&CIRCUIT);
             (hal, eval)
         }
@@ -138,21 +155,21 @@ cfg_if::cfg_if! {
 }
 
 impl<'a> Prover<'a> {
-    pub fn new<M>(elf: &[u8], method_id: M) -> Result<Self>
+    pub fn new<D>(elf: &[u8], image_id: D) -> Result<Self>
     where
-        MethodId: From<M>,
+        Digest: From<D>,
     {
-        Self::new_with_opts(elf, method_id, ProverOpts::default())
+        Self::new_with_opts(elf, image_id, ProverOpts::default())
     }
 
-    pub fn new_with_opts<M>(elf: &[u8], method_id: M, opts: ProverOpts<'a>) -> Result<Self>
+    pub fn new_with_opts<D>(elf: &[u8], image_id: D, opts: ProverOpts<'a>) -> Result<Self>
     where
-        MethodId: From<M>,
+        Digest: From<D>,
     {
         Ok(Prover {
             elf: Program::load_elf(elf, MEM_SIZE as u32)?,
             inner: ProverImpl::new(opts),
-            method_id: method_id.into(),
+            image_id: image_id.into(),
             cycles: 0,
         })
     }
@@ -167,31 +184,42 @@ impl<'a> Prover<'a> {
             .extend_from_slice(bytemuck::cast_slice(slice));
     }
 
-    pub fn get_output(&self) -> &[u8] {
+    pub fn get_output_u8_slice(&self) -> &[u8] {
         &self.inner.output
+    }
+
+    pub fn get_output_u32_vec(&self) -> Result<Vec<u32>> {
+        if self.inner.output.len() % WORD_SIZE != 0 {
+            bail!("Private output must be word-aligned");
+        }
+        Ok(self
+            .inner
+            .output
+            .chunks_exact(WORD_SIZE)
+            .map(|x| u32::from_ne_bytes(x.try_into().unwrap()))
+            .collect())
     }
 
     #[tracing::instrument(skip_all)]
     pub fn run(&mut self) -> Result<Receipt> {
-        HAL.with(|(hal, eval)| {
-            cfg_if::cfg_if! {
-                if #[cfg(feature = "dual")] {
-                    let cpu_hal = risc0_zkp::hal::cpu::BabyBearCpuHal::new();
-                    let cpu_eval = risc0_circuit_rv32im::cpu::CpuEvalCheck::new(&CIRCUIT);
-                    let hal = risc0_zkp::hal::dual::DualHal::new(hal.as_ref(), &cpu_hal);
-                    let eval = risc0_zkp::hal::dual::DualEvalCheck::new(eval, &cpu_eval);
-                    self.run_with_hal(&hal, &eval)
-                } else {
-                    self.run_with_hal(hal.as_ref(), eval)
-                }
+        let (hal, eval) = default_hal();
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "dual")] {
+                let cpu_hal = risc0_zkp::hal::cpu::BabyBearSha256CpuHal::new();
+                let cpu_eval = risc0_circuit_rv32im::cpu::CpuEvalCheck::new(&CIRCUIT);
+                let hal = risc0_zkp::hal::dual::DualHal::new(hal.as_ref(), &cpu_hal);
+                let eval = risc0_zkp::hal::dual::DualEvalCheck::new(eval, &cpu_eval);
+                self.run_with_hal(&hal, &eval)
+            } else {
+                self.run_with_hal(hal.as_ref(), &eval)
             }
-        })
+        }
     }
 
     #[tracing::instrument(skip_all)]
     pub fn run_with_hal<H, E>(&mut self, hal: &H, eval: &E) -> Result<Receipt>
     where
-        H: Hal<Elem = BabyBearElem, ExtElem = BabyBearExtElem>,
+        H: Hal<Field = BabyBear, Elem = BabyBearElem, ExtElem = BabyBearExtElem>,
         E: EvalCheck<H>,
     {
         let skip_seal = self.inner.opts.skip_seal || insecure_skip_seal();
@@ -199,24 +227,45 @@ impl<'a> Prover<'a> {
         let mut executor = exec::RV32Executor::new(&CIRCUIT, &self.elf, &mut self.inner);
         self.cycles = executor.run()?;
 
-        let mut prover = ProveAdapter::new(&mut executor.executor);
+        let mut adapter = ProveAdapter::new(&mut executor.executor);
+        let mut prover = risc0_zkp::prove::Prover::new(hal, CIRCUIT.get_taps());
+
+        adapter.execute(prover.iop());
 
         let seal = if skip_seal {
-            risc0_zkp::prove::prove_without_seal(sha(), &mut prover);
             Vec::new()
         } else {
-            risc0_zkp::prove::prove(hal, sha(), &mut prover, eval)
+            prover.set_po2(adapter.po2() as usize);
+
+            prover.commit_group(
+                REGISTER_GROUP_CODE,
+                hal.copy_from_elem("code", &adapter.get_code().as_slice()),
+            );
+            prover.commit_group(
+                REGISTER_GROUP_DATA,
+                hal.copy_from_elem("data", &adapter.get_data().as_slice()),
+            );
+            adapter.accumulate(prover.iop());
+            prover.commit_group(
+                REGISTER_GROUP_ACCUM,
+                hal.copy_from_elem("accum", &adapter.get_accum().as_slice()),
+            );
+
+            let mix = hal.copy_from_elem("mix", &adapter.get_mix().as_slice());
+            let out = hal.copy_from_elem("out", &adapter.get_io().as_slice());
+
+            prover.finalize(&[&mix, &out], eval)
         };
 
         // Attach the full version of the output journal & construct receipt object
         let receipt = Receipt {
-            journal: self.inner.commit.clone(),
+            journal: self.inner.journal.clone(),
             seal,
         };
 
-        if !skip_seal {
+        if !skip_seal && !self.inner.opts.skip_verify {
             // Verify receipt to make sure it works
-            receipt.verify(&self.method_id)?;
+            receipt.verify(&self.image_id)?;
         }
 
         Ok(receipt)
@@ -226,7 +275,7 @@ impl<'a> Prover<'a> {
 struct ProverImpl<'a> {
     pub input: Vec<u8>,
     pub output: Vec<u8>,
-    pub commit: Vec<u32>,
+    pub journal: Vec<u8>,
     pub opts: ProverOpts<'a>,
 }
 
@@ -235,7 +284,7 @@ impl<'a> ProverImpl<'a> {
         Self {
             input: Vec::new(),
             output: Vec::new(),
-            commit: Vec::new(),
+            journal: Vec::new(),
             opts,
         }
     }
@@ -261,6 +310,11 @@ impl<'a> exec::HostHandler for ProverImpl<'a> {
                 std::io::stderr().lock().write_all(buf).unwrap();
                 Ok(Vec::new())
             }
+            SENDRECV_CHANNEL_JOURNAL => {
+                log::debug!("SENDRECV_CHANNEL_JOURNAL: {}", buf.len());
+                self.journal.extend_from_slice(buf);
+                Ok(vec![])
+            }
             _ => bail!("Unknown channel: {channel}"),
         }
     }
@@ -277,12 +331,7 @@ impl<'a> exec::HostHandler for ProverImpl<'a> {
         }
     }
 
-    fn on_commit(&mut self, buf: &[u32]) -> Result<()> {
-        self.commit.extend_from_slice(buf);
-        Ok(())
-    }
-
-    fn on_fault(&mut self, msg: &str) -> Result<()> {
+    fn on_panic(&mut self, msg: &str) -> Result<()> {
         bail!("{}", msg)
     }
 }
@@ -313,6 +362,7 @@ fn merge_word8((x0, x1, x2, x3): (BabyBearElem, BabyBearElem, BabyBearElem, Baby
 
 /// An event traced from the running VM.
 #[non_exhaustive]
+#[derive(PartialEq)]
 pub enum TraceEvent {
     /// An instruction has started at the given program counter
     InstructionStart {

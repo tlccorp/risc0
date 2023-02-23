@@ -1,4 +1,4 @@
-// Copyright 2022 RISC Zero, Inc.
+// Copyright 2023 RISC Zero, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,10 +13,8 @@
 // limitations under the License.
 
 use clap::Parser;
-use risc0_zkp::{
-    field::baby_bear::{BabyBearElem, BabyBearExtElem},
-    hal::{EvalCheck, Hal},
-};
+use risc0_core::field::baby_bear::{BabyBear, BabyBearElem, BabyBearExtElem};
+use risc0_zkp::hal::{EvalCheck, Hal};
 use risc0_zkvm::{prove::default_hal, Prover, Receipt};
 use risc0_zkvm_methods::{FIB_ELF, FIB_ID};
 use tracing_subscriber::{prelude::*, EnvFilter};
@@ -52,7 +50,7 @@ fn main() {
 #[tracing::instrument(skip_all)]
 fn top<H, E>(hal: &H, eval: &E, iterations: u32) -> Receipt
 where
-    H: Hal<Elem = BabyBearElem, ExtElem = BabyBearExtElem>,
+    H: Hal<Field = BabyBear, Elem = BabyBearElem, ExtElem = BabyBearExtElem>,
     E: EvalCheck<H>,
 {
     let mut prover = Prover::new(FIB_ELF, FIB_ID).unwrap();

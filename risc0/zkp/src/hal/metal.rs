@@ -1,4 +1,4 @@
-// Copyright 2022 RISC Zero, Inc.
+// Copyright 2023 RISC Zero, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,18 +18,23 @@ use metal::{
     Buffer as MetalBuffer, CommandQueue, ComputePipelineDescriptor, Device, MTLResourceOptions,
     MTLSize, NSRange,
 };
+use risc0_core::field::{
+    baby_bear::{BabyBear, BabyBearElem, BabyBearExtElem},
+    Elem, ExtElem, RootsOfUnity,
+};
 
 use super::{Buffer, Hal};
 use crate::{
-    core::{log2_ceil, sha::Digest},
-    field::{
-        baby_bear::{BabyBearElem, BabyBearExtElem},
-        Elem, ExtElem, RootsOfUnity,
+    core::{
+        config::{HashSuite, HashSuitePoseidon, HashSuiteSha256},
+        log2_ceil,
+        sha::Digest,
+        sha_cpu,
     },
     FRI_FOLD,
 };
 
-const METAL_LIB: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/kernels.metallib"));
+const METAL_LIB: &[u8] = include_bytes!(env!("ZKP_METAL_PATH"));
 
 const KERNEL_NAMES: &[&str] = &[
     "batch_expand",
@@ -45,15 +50,139 @@ const KERNEL_NAMES: &[&str] = &[
     "multi_poly_eval",
     "sha_fold",
     "sha_rows",
+    "poseidon_fold",
+    "poseidon_rows",
     "zk_shift",
 ];
 
+pub trait MetalHash {
+    /// Which hash suite should the CPU use
+    type HashSuite: HashSuite<BabyBear>;
+    /// Create a hash implemention
+    fn new(hal: &MetalHal<Self>) -> Self;
+    /// Run the hash_fold function
+    fn hash_fold(&self, hal: &MetalHal<Self>, io: &BufferImpl<Digest>, output_size: usize);
+    /// Run the hash_rows function
+    fn hash_rows(
+        &self,
+        hal: &MetalHal<Self>,
+        output: &BufferImpl<Digest>,
+        matrix: &BufferImpl<BabyBearElem>,
+    );
+}
+
+pub struct MetalHashSha256 {}
+
+impl MetalHash for MetalHashSha256 {
+    type HashSuite = HashSuiteSha256<BabyBear, sha_cpu::Impl>;
+
+    fn new(_hal: &MetalHal<Self>) -> Self {
+        MetalHashSha256 {}
+    }
+
+    fn hash_fold(&self, hal: &MetalHal<Self>, io: &BufferImpl<Digest>, output_size: usize) {
+        let args = &[
+            io.as_arg_with_offset(output_size),
+            io.as_arg_with_offset(output_size * 2),
+        ];
+        hal.dispatch_by_name("sha_fold", args, output_size as u64);
+    }
+
+    fn hash_rows(
+        &self,
+        hal: &MetalHal<Self>,
+        output: &BufferImpl<Digest>,
+        matrix: &BufferImpl<BabyBearElem>,
+    ) {
+        let row_size = output.size();
+        let col_size = matrix.size() / output.size();
+        assert_eq!(matrix.size(), col_size * row_size);
+        let args = &[
+            output.as_arg(),
+            matrix.as_arg(),
+            KernelArg::Integer(row_size as u32),
+            KernelArg::Integer(col_size as u32),
+        ];
+        hal.dispatch_by_name("sha_rows", args, row_size as u64);
+    }
+}
+
+pub struct MetalHashPoseidon {
+    round_constants: BufferImpl<BabyBearElem>,
+    mds: BufferImpl<BabyBearElem>,
+    partial_comp_matrix: BufferImpl<BabyBearElem>,
+    partial_comp_offset: BufferImpl<BabyBearElem>,
+}
+
+impl MetalHash for MetalHashPoseidon {
+    type HashSuite = HashSuitePoseidon;
+
+    fn new(hal: &MetalHal<Self>) -> Self {
+        use crate::core::poseidon;
+        let round_constants =
+            hal.copy_from_elem("round_constants", poseidon::consts::ROUND_CONSTANTS);
+        let mds = hal.copy_from_elem("mds", poseidon::consts::MDS);
+        let partial_comp_matrix = hal.copy_from_elem(
+            "partial_comp_matrix",
+            &*poseidon::consts::PARTIAL_COMP_MATRIX,
+        );
+        let partial_comp_offset = hal.copy_from_elem(
+            "partial_comp_offset",
+            &*poseidon::consts::PARTIAL_COMP_OFFSET,
+        );
+        MetalHashPoseidon {
+            round_constants,
+            mds,
+            partial_comp_matrix,
+            partial_comp_offset,
+        }
+    }
+
+    fn hash_fold(&self, hal: &MetalHal<Self>, io: &BufferImpl<Digest>, output_size: usize) {
+        let args = &[
+            self.round_constants.as_arg(),
+            self.mds.as_arg(),
+            self.partial_comp_matrix.as_arg(),
+            self.partial_comp_offset.as_arg(),
+            io.as_arg_with_offset(output_size),
+            io.as_arg_with_offset(output_size * 2),
+        ];
+        hal.dispatch_by_name("poseidon_fold", args, output_size as u64);
+    }
+
+    fn hash_rows(
+        &self,
+        hal: &MetalHal<Self>,
+        output: &BufferImpl<Digest>,
+        matrix: &BufferImpl<BabyBearElem>,
+    ) {
+        let row_size = output.size();
+        let col_size = matrix.size() / output.size();
+        assert_eq!(matrix.size(), col_size * row_size);
+        let args = &[
+            self.round_constants.as_arg(),
+            self.mds.as_arg(),
+            self.partial_comp_matrix.as_arg(),
+            self.partial_comp_offset.as_arg(),
+            output.as_arg(),
+            matrix.as_arg(),
+            KernelArg::Integer(row_size as u32),
+            KernelArg::Integer(col_size as u32),
+        ];
+        hal.dispatch_by_name("poseidon_rows", args, row_size as u64);
+    }
+}
+
 #[derive(Debug)]
-pub struct MetalHal {
+pub struct MetalHal<Hash: MetalHash + ?Sized> {
     pub device: Device,
     pub cmd_queue: CommandQueue,
     kernels: HashMap<String, ComputePipelineDescriptor>,
+    hash: Option<Box<Hash>>,
 }
+
+pub type MetalHalSha256 = MetalHal<MetalHashSha256>;
+pub type MetalHalPoseidon = MetalHal<MetalHashPoseidon>;
 
 #[derive(Clone, Debug)]
 pub struct BufferImpl<T> {
@@ -163,7 +292,7 @@ impl<T: Clone> Buffer<T> for BufferImpl<T> {
     }
 }
 
-impl MetalHal {
+impl<MH: MetalHash> MetalHal<MH> {
     pub fn new() -> Self {
         let device = Device::system_default().expect("no device found");
         let library = device.new_library_with_data(METAL_LIB).unwrap();
@@ -175,11 +304,15 @@ impl MetalHal {
             pipeline.set_compute_function(Some(&function));
             kernels.insert(name.to_string(), pipeline);
         }
-        Self {
+        let mut hal = Self {
             device,
             cmd_queue,
             kernels,
-        }
+            hash: None,
+        };
+        let hash = Box::new(MH::new(&hal));
+        hal.hash = Some(hash);
+        hal
     }
 
     pub fn dispatch_by_name(&self, name: &str, args: &[KernelArg], count: u64) {
@@ -239,14 +372,19 @@ impl MetalHal {
 }
 
 #[allow(unused_variables)]
-impl Hal for MetalHal {
+impl<MH: MetalHash> Hal for MetalHal<MH> {
     type Elem = BabyBearElem;
     type ExtElem = BabyBearExtElem;
+    type Field = BabyBear;
 
     type BufferDigest = BufferImpl<Digest>;
     type BufferElem = BufferImpl<Self::Elem>;
     type BufferExtElem = BufferImpl<Self::ExtElem>;
     type BufferU32 = BufferImpl<u32>;
+
+    type HashSuite = MH::HashSuite;
+    type Hash = <MH::HashSuite as HashSuite<BabyBear>>::Hash;
+    type Rng = <MH::HashSuite as HashSuite<BabyBear>>::Rng;
 
     fn alloc_elem(&self, _name: &'static str, size: usize) -> Self::BufferElem {
         BufferImpl::new(&self.device, self.cmd_queue.clone(), size)
@@ -488,27 +626,14 @@ impl Hal for MetalHal {
         self.dispatch_by_name("mix_poly_coeffs", args, count as u64);
     }
 
-    fn sha_fold(&self, io: &Self::BufferDigest, input_size: usize, output_size: usize) {
+    fn hash_fold(&self, io: &Self::BufferDigest, input_size: usize, output_size: usize) {
         assert_eq!(input_size, 2 * output_size);
-        let args = &[
-            io.as_arg_with_offset(output_size),
-            io.as_arg_with_offset(input_size),
-        ];
-        self.dispatch_by_name("sha_fold", args, output_size as u64);
+        self.hash.as_ref().unwrap().hash_fold(self, io, output_size);
     }
 
     #[tracing::instrument(skip_all)]
-    fn sha_rows(&self, output: &Self::BufferDigest, matrix: &Self::BufferElem) {
-        let row_size = output.size();
-        let col_size = matrix.size() / output.size();
-        assert_eq!(matrix.size(), col_size * row_size);
-        let args = &[
-            output.as_arg(),
-            matrix.as_arg(),
-            KernelArg::Integer(row_size as u32),
-            KernelArg::Integer(col_size as u32),
-        ];
-        self.dispatch_by_name("sha_rows", args, row_size as u64);
+    fn hash_rows(&self, output: &Self::BufferDigest, matrix: &Self::BufferElem) {
+        self.hash.as_ref().unwrap().hash_rows(self, output, matrix);
     }
 
     #[tracing::instrument(skip_all)]
@@ -559,82 +684,93 @@ fn compute_launch_params(n_bits: u32, s_bits: u32, c_size: u32) -> (MTLSize, MTL
 mod tests {
     use test_log::test;
 
-    use super::MetalHal;
+    use super::MetalHalPoseidon;
+    use super::MetalHalSha256;
     use crate::hal::testutil;
 
     #[test]
     fn batch_bit_reverse() {
-        testutil::batch_bit_reverse(MetalHal::new());
+        testutil::batch_bit_reverse(MetalHalSha256::new());
     }
 
     #[test]
     fn batch_evaluate_any() {
-        testutil::batch_evaluate_any(MetalHal::new());
+        testutil::batch_evaluate_any(MetalHalSha256::new());
     }
 
     #[test]
     fn batch_evaluate_ntt() {
-        testutil::batch_evaluate_ntt(MetalHal::new());
+        testutil::batch_evaluate_ntt(MetalHalSha256::new());
     }
 
     #[test]
     fn batch_expand() {
-        testutil::batch_expand(MetalHal::new());
+        testutil::batch_expand(MetalHalSha256::new());
     }
 
     #[test]
     fn batch_interpolate_ntt() {
-        testutil::batch_interpolate_ntt(MetalHal::new());
+        testutil::batch_interpolate_ntt(MetalHalSha256::new());
     }
 
     #[test]
     #[should_panic]
     fn check_req() {
-        testutil::check_req(MetalHal::new());
+        testutil::check_req(MetalHalSha256::new());
     }
 
     #[test]
     fn eltwise_add_fp() {
-        testutil::eltwise_add_elem(MetalHal::new());
+        testutil::eltwise_add_elem(MetalHalSha256::new());
     }
 
     #[test]
     fn eltwise_copy_fp() {
-        testutil::eltwise_copy_elem(MetalHal::new());
+        testutil::eltwise_copy_elem(MetalHalSha256::new());
     }
 
     #[test]
     fn eltwise_sum_extelem() {
-        testutil::eltwise_sum_extelem(MetalHal::new());
+        testutil::eltwise_sum_extelem(MetalHalSha256::new());
     }
 
     #[test]
     fn fri_fold() {
-        testutil::fri_fold(MetalHal::new());
+        testutil::fri_fold(MetalHalSha256::new());
     }
 
     #[test]
     fn mix_poly_coeffs() {
-        testutil::mix_poly_coeffs(MetalHal::new());
+        testutil::mix_poly_coeffs(MetalHalSha256::new());
     }
 
     #[test]
-    fn sha_fold() {
-        testutil::sha_fold(MetalHal::new());
+    fn hash_fold() {
+        testutil::hash_fold(MetalHalSha256::new());
     }
 
     #[test]
-    fn sha_rows() {
-        testutil::sha_rows(MetalHal::new());
+    fn hash_rows() {
+        testutil::hash_rows(MetalHalSha256::new());
+    }
+
+    #[test]
+    fn hash_fold_poseidon() {
+        testutil::hash_fold(MetalHalPoseidon::new());
+    }
+
+    #[test]
+    fn hash_rows_poseidon() {
+        testutil::hash_rows(MetalHalPoseidon::new());
     }
 
     #[test]
     fn slice() {
-        testutil::slice(MetalHal::new());
+        testutil::slice(MetalHalSha256::new());
     }
 
     #[test]
     fn zk_shift() {
-        testutil::zk_shift(MetalHal::new());
+        testutil::zk_shift(MetalHalSha256::new());
     }
 }

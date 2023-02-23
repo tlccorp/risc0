@@ -1,4 +1,4 @@
-// Copyright 2022 RISC Zero, Inc.
+// Copyright 2023 RISC Zero, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,6 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Cryptographic algorithms for verifying a ZK proof of compute
+//!
+//! This module is not typically used directly. Instead, we recommend calling
+//! [`Receipt::verify`].
+//!
+//! [`Receipt::verify`]: https://docs.rs/risc0-zkvm/latest/risc0_zkvm/receipt/struct.Receipt.html#method.verify
+
 pub mod adapter;
 mod fri;
 pub(crate) mod merkle;
@@ -19,20 +26,26 @@ pub mod read_iop;
 
 use alloc::{vec, vec::Vec};
 use core::fmt;
+#[cfg(not(target_os = "zkvm"))]
+use core::marker::PhantomData;
 
 #[cfg(not(target_os = "zkvm"))]
 pub use host::CpuVerifyHal;
-use risc0_zeroio::WORD_SIZE;
+use risc0_core::field::{Elem, ExtElem, Field, RootsOfUnity};
 
 use self::adapter::VerifyAdapter;
+#[cfg(not(target_os = "zkvm"))]
+pub use crate::core::config::HashSuite;
 use crate::{
-    adapter::{CircuitInfo, TapsProvider},
-    core::{
-        log2_ceil,
-        sha::{Digest, Sha, DIGEST_WORDS},
+    adapter::{
+        CircuitInfo, TapsProvider, REGISTER_GROUP_ACCUM, REGISTER_GROUP_CODE, REGISTER_GROUP_DATA,
     },
-    field::{Elem, ExtElem, RootsOfUnity},
-    taps::{RegisterGroup, TapSet},
+    core::{
+        config::{ConfigHash, ConfigRng},
+        digest::Digest,
+        log2_ceil,
+    },
+    taps::TapSet,
     verify::{fri::fri_verify, merkle::MerkleTreeVerifier, read_iop::ReadIOP},
     FRI_FOLD, INV_RATE, MAX_CYCLES_PO2, QUERIES,
 };
@@ -40,8 +53,8 @@ use crate::{
 #[derive(Debug)]
 pub enum VerificationError {
     ReceiptFormatError,
-    MethodCycleError { required: usize },
-    MethodVerificationError,
+    ControlVerificationError,
+    ImageVerificationError,
     MerkleQueryOutOfRange { idx: usize, rows: usize },
     InvalidProof,
     JournalSealRootMismatch,
@@ -52,10 +65,8 @@ impl fmt::Display for VerificationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             VerificationError::ReceiptFormatError => write!(f, "invalid receipt format"),
-            VerificationError::MethodCycleError { required } => {
-                write!(f, "Method execution cycle exceeded code limit. Increase code limit to at least {required}.")
-            }
-            VerificationError::MethodVerificationError => write!(f, "method verification failed"),
+            VerificationError::ControlVerificationError => write!(f, "control_id mismatch"),
+            VerificationError::ImageVerificationError => write!(f, "image_id mismatch"),
             VerificationError::MerkleQueryOutOfRange { idx, rows } => write!(
                 f,
                 "Requested Merkle validation on row {idx}, but only {rows} rows exist",
@@ -76,13 +87,13 @@ impl fmt::Display for VerificationError {
 }
 
 pub trait VerifyHal {
-    type Sha: Sha;
+    type Hash: ConfigHash<Self::Field>;
+    type Rng: ConfigRng<Self::Field>;
     type Elem: Elem + RootsOfUnity;
     type ExtElem: ExtElem<SubElem = Self::Elem>;
+    type Field: Field<Elem = Self::Elem, ExtElem = Self::ExtElem>;
 
     const CHECK_SIZE: usize = INV_RATE * Self::ExtElem::EXT_SIZE;
-
-    fn sha(&self) -> &Self::Sha;
 
     fn debug(&self, msg: &str);
 
@@ -117,46 +128,46 @@ pub trait VerifyHal {
 
 #[cfg(not(target_os = "zkvm"))]
 mod host {
-    use alloc::collections::BTreeMap;
     use core::{cell::RefCell, iter::zip};
+
+    use risc0_core::field::Field;
 
     use super::*;
     use crate::{
         adapter::PolyExt,
         core::ntt::{bit_reverse, interpolate_ntt},
-        field::Field,
         FRI_FOLD,
     };
 
     struct TapCache<F: Field> {
+        taps: *const TapSet<'static>,
+        mix: F::ExtElem,
         tap_mix_pows: Vec<F::ExtElem>,
         check_mix_pows: Vec<F::ExtElem>,
     }
 
-    pub struct CpuVerifyHal<'a, S: Sha, F: Field, C: PolyExt<F>> {
-        sha: &'a S,
+    pub struct CpuVerifyHal<'a, F: Field, HS: HashSuite<F>, C: PolyExt<F>> {
         circuit: &'a C,
-        tap_cache: RefCell<BTreeMap<*const TapSet<'static>, TapCache<F>>>,
+        tap_cache: RefCell<Option<TapCache<F>>>,
+        phantom: PhantomData<HS>,
     }
 
-    impl<'a, S: Sha, F: Field, C: PolyExt<F>> CpuVerifyHal<'a, S, F, C> {
-        pub fn new(sha: &'a S, circuit: &'a C) -> Self {
+    impl<'a, F: Field, HS: HashSuite<F>, C: PolyExt<F>> CpuVerifyHal<'a, F, HS, C> {
+        pub fn new(circuit: &'a C) -> Self {
             Self {
-                sha,
                 circuit,
-                tap_cache: RefCell::new(BTreeMap::new()),
+                tap_cache: RefCell::new(None),
+                phantom: PhantomData,
             }
         }
     }
 
-    impl<'a, S: Sha, F: Field, C: PolyExt<F>> VerifyHal for CpuVerifyHal<'a, S, F, C> {
-        type Sha = S;
+    impl<'a, F: Field, HS: HashSuite<F>, C: PolyExt<F>> VerifyHal for CpuVerifyHal<'a, F, HS, C> {
+        type Hash = HS::Hash;
+        type Rng = HS::Rng;
         type Elem = F::Elem;
         type ExtElem = F::ExtElem;
-
-        fn sha(&self) -> &Self::Sha {
-            self.sha
-        }
+        type Field = F;
 
         fn debug(&self, msg: &str) {
             log::debug!("{}", msg);
@@ -203,8 +214,14 @@ mod host {
             let combo_count = taps.combos_size();
             let x = Self::ExtElem::from_subfield(&x);
 
-            let mut tap_cache_lock = self.tap_cache.borrow_mut();
-            let tap_cache = tap_cache_lock.entry(taps).or_insert_with(|| {
+            let mut tap_cache = self.tap_cache.borrow_mut();
+            if let Some(ref c) = &mut *tap_cache {
+                if c.taps != taps || c.mix != mix {
+                    // debug!("Resetting tap cache");
+                    tap_cache.take();
+                }
+            }
+            if tap_cache.is_none() {
                 let mut cur_mix = Self::ExtElem::ONE;
                 let mut tap_mix_pows = Vec::with_capacity(taps.reg_count());
                 for _reg in taps.regs() {
@@ -222,11 +239,15 @@ mod host {
                     cur_mix *= mix;
                 }
 
-                TapCache {
+                tap_cache.replace(TapCache {
+                    taps,
+                    mix,
                     tap_mix_pows,
                     check_mix_pows,
-                }
-            });
+                });
+            }
+            let tap_cache = tap_cache.as_ref().unwrap();
+
             for (reg, cur) in zip(taps.regs(), tap_cache.tap_mix_pows.iter()) {
                 tot[reg.combo_id()] += *cur * rows[reg.group() as usize][reg.offset()];
             }
@@ -254,18 +275,20 @@ mod host {
     }
 }
 
+/// Verify a seal is valid for the given circuit, code, and globals
 #[tracing::instrument(skip_all)]
-pub fn verify<'a, H, C, F>(
+pub fn verify<'a, H, C, CheckCode, CheckGlobals>(
     hal: &'a H,
     circuit: &C,
     seal: &'a [u32],
-    journal: &'a [u32],
-    check_code: F,
+    check_code: CheckCode,
+    check_globals: CheckGlobals,
 ) -> Result<(), VerificationError>
 where
     H: VerifyHal,
     C: CircuitInfo + TapsProvider,
-    F: Fn(u32, &Digest) -> Result<(), VerificationError>,
+    CheckCode: Fn(u32, &Digest) -> Result<(), VerificationError>,
+    CheckGlobals: Fn(&[H::Elem]) -> Result<(), VerificationError>,
 {
     if seal.is_empty() {
         return Err(VerificationError::ReceiptFormatError);
@@ -275,50 +298,13 @@ where
     let taps = adapter.taps();
 
     // Make IOP
-    let mut iop = ReadIOP::new(hal.sha(), seal);
+    let mut iop = ReadIOP::<H::Field, H::Rng>::new(seal);
 
     // Read any execution state
     adapter.execute(&mut iop);
 
-    if let Some(outputs) = adapter.out {
-        let result_length_index = 16;
-        // Each element outputs are generated by the output ecall. The handler for the
-        // output ecall splits the 32-bit value supplied to the ecall into two
-        // 16-bit chunks. Since each index of the journal contains all 32 bits
-        // of the output ecall value, we must shift and combine the two 16-bit
-        // values before comparing them to the journal.
-        let output_len = u32::from(outputs[result_length_index])
-            + u32::from(outputs[result_length_index + 1])
-                .checked_shl(16)
-                .unwrap();
-        if journal.len() * WORD_SIZE != output_len.try_into().unwrap() {
-            return Err(VerificationError::SealJournalLengthMismatch {
-                seal_len: output_len.try_into().unwrap(),
-                journal_len: journal.len() * WORD_SIZE,
-            });
-        }
-        if journal.len() <= DIGEST_WORDS {
-            for i in 0..journal.len() {
-                if journal[i]
-                    != u32::from(outputs[i * 2])
-                        + u32::from(outputs[i * 2 + 1]).checked_shl(16).unwrap()
-                {
-                    return Err(VerificationError::JournalSealRootMismatch);
-                }
-            }
-        } else {
-            let journal_digest = hal.sha().hash_raw_pod_slice(journal);
-            let journal_hash = journal_digest.as_slice();
-            for i in 0..journal_hash.len() {
-                if journal_hash[i]
-                    != (u32::from(outputs[i * 2]))
-                        + u32::from(outputs[i * 2 + 1]).checked_shl(16).unwrap()
-                {
-                    return Err(VerificationError::JournalSealRootMismatch);
-                }
-            }
-        }
-    }
+    let io = adapter.out.ok_or(VerificationError::ReceiptFormatError)?;
+    check_globals(&io)?;
 
     // Get the size
     let po2 = adapter.po2();
@@ -328,18 +314,15 @@ where
     // debug!("size = {size}, po2 = {po2}");
 
     // Get taps and compute sizes
-    let code_size = taps.group_size(RegisterGroup::Code);
-    let data_size = taps.group_size(RegisterGroup::Data);
-    let accum_size = taps.group_size(RegisterGroup::Accum);
+    let code_size = taps.group_size(REGISTER_GROUP_CODE);
+    let data_size = taps.group_size(REGISTER_GROUP_DATA);
+    let accum_size = taps.group_size(REGISTER_GROUP_ACCUM);
 
     // Get merkle root for the code merkle tree.
-    // The code merkle tree contains the control instructions for the zkVM,
-    // including the byte code from the ELF file being executed.
+    // The code merkle tree contains the control instructions for the zkVM.
     hal.debug("code_merkle");
-    let code_merkle = MerkleTreeVerifier::new(hal, &mut iop, domain, code_size, QUERIES);
+    let code_merkle = MerkleTreeVerifier::<H>::new(&mut iop, domain, code_size, QUERIES);
     // debug!("codeRoot = {}", code_merkle.root());
-
-    // Verify code is valid
     check_code(po2, code_merkle.root())?;
 
     // Get merkle root for the data merkle tree.
@@ -347,7 +330,7 @@ where
     // including memory accesses as well as the permutation of those memory
     // accesses sorted by location used by PLONK.
     hal.debug("data_merkle");
-    let data_merkle = MerkleTreeVerifier::new(hal, &mut iop, domain, data_size, QUERIES);
+    let data_merkle = MerkleTreeVerifier::<H>::new(&mut iop, domain, data_size, QUERIES);
     // debug!("dataRoot = {}", data_merkle.root());
 
     // Prep accumulation
@@ -364,27 +347,27 @@ where
     // values (see PLOOKUP paper for details). This permutation is used to
     // implement a look-up table.
     hal.debug("accum_merkle");
-    let accum_merkle = MerkleTreeVerifier::new(hal, &mut iop, domain, accum_size, QUERIES);
+    let accum_merkle = MerkleTreeVerifier::<H>::new(&mut iop, domain, accum_size, QUERIES);
     // debug!("accumRoot = {}", accum_merkle.root());
 
     // Get a pseudorandom value with which to mix the constraint polynomials.
     // See DEEP-ALI protocol from DEEP-FRI paper for details on constraint mixing.
-    let poly_mix = H::ExtElem::random(&mut iop);
+    let poly_mix = iop.random_ext_elem();
 
     hal.debug("check_merkle");
-    let check_merkle = MerkleTreeVerifier::new(hal, &mut iop, domain, H::CHECK_SIZE, QUERIES);
+    let check_merkle = MerkleTreeVerifier::<H>::new(&mut iop, domain, H::CHECK_SIZE, QUERIES);
     // debug!("checkRoot = {}", check_merkle.root());
 
     // Get a pseudorandom DEEP query point
     // See DEEP-ALI protocol from DEEP-FRI paper for details on DEEP query.
-    let z = H::ExtElem::random(&mut iop);
+    let z = iop.random_ext_elem();
     // debug!("Z = {z:?}");
     let back_one = <H::Elem as RootsOfUnity>::ROU_REV[po2 as usize];
 
     // Read the U coeffs (the interpolations of the taps) + commit their hash.
     let num_taps = taps.tap_size();
     let coeff_u = iop.read_field_elem_slice(num_taps + H::CHECK_SIZE);
-    let hash_u = *hal.sha().hash_raw_pod_slice(coeff_u);
+    let hash_u = *H::Hash::hash_ext_elem_slice(coeff_u);
     iop.commit(&hash_u);
 
     // Now, convert U polynomials from coefficient form to evaluation form
@@ -443,7 +426,7 @@ where
     }
 
     // Set the mix mix value, pseudorandom value used for FRI batching
-    let mix = H::ExtElem::random(&mut iop);
+    let mix = iop.random_ext_elem();
     // debug!("mix = {mix:?}");
 
     // Make the mixed U polynomials.
@@ -491,7 +474,7 @@ where
         hal,
         &mut iop,
         size,
-        |iop: &mut ReadIOP<_>, idx: usize| -> Result<H::ExtElem, VerificationError> {
+        |iop: &mut ReadIOP<H::Field, _>, idx: usize| -> Result<H::ExtElem, VerificationError> {
             hal.debug("fri_verify");
             let x = gen.pow(idx);
             let rows = [

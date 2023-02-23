@@ -1,4 +1,4 @@
-// Copyright 2022 RISC Zero, Inc.
+// Copyright 2023 RISC Zero, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ use alloc::vec::Vec;
 use log::debug;
 
 use crate::{
-    core::sha::{Digest, Sha},
+    core::digest::Digest,
     hal::{Buffer, Hal},
     merkle::MerkleTreeParams,
     prove::write_iop::WriteIOP,
@@ -55,13 +55,13 @@ impl<H: Hal> MerkleTreeProver<H> {
         let params = MerkleTreeParams::new(rows, cols, queries);
         // Allocate nodes
         let nodes = hal.alloc_digest("nodes", rows * 2);
-        // Sha each column
-        hal.sha_rows(&nodes.slice(rows, rows), matrix);
+        // SHA-256 hash each column
+        hal.hash_rows(&nodes.slice(rows, rows), matrix);
         // For each layer, sha up the layer below
-        tracing::info_span!("sha_fold").in_scope(|| {
+        tracing::info_span!("hash_fold").in_scope(|| {
             for i in (0..params.layers).rev() {
                 let layer_size = 1 << i;
-                hal.sha_fold(&nodes, layer_size * 2, layer_size);
+                hal.hash_fold(&nodes, layer_size * 2, layer_size);
             }
         });
         let mut nodes_host = Vec::with_capacity(nodes.size());
@@ -78,7 +78,7 @@ impl<H: Hal> MerkleTreeProver<H> {
     }
 
     /// Write the 'top' of the merkle tree and commit to the root.
-    pub fn commit<S: Sha>(&self, iop: &mut WriteIOP<S>) {
+    pub fn commit(&self, iop: &mut WriteIOP<H::Field, H::Rng>) {
         let top_size = self.params.top_size;
         iop.write_pod_slice(&self.nodes[top_size..top_size * 2]);
         iop.commit(self.root());
@@ -98,7 +98,7 @@ impl<H: Hal> MerkleTreeProver<H> {
     /// It is presumed the verifier is given the index of the row from other
     /// parts of the protocol, and verification will of course fail if the
     /// wrong row is specified.
-    pub fn prove<S: Sha>(&self, iop: &mut WriteIOP<S>, idx: usize) -> Vec<H::Elem> {
+    pub fn prove(&self, iop: &mut WriteIOP<H::Field, H::Rng>, idx: usize) -> Vec<H::Elem> {
         assert!(idx < self.params.row_size);
         let mut out = Vec::with_capacity(self.params.col_size);
         self.matrix.view(|view| {
@@ -120,21 +120,21 @@ impl<H: Hal> MerkleTreeProver<H> {
 
 #[cfg(test)]
 mod tests {
-    use rand::{Rng, RngCore};
+    use rand::Rng;
+    use risc0_core::field::{
+        baby_bear::{BabyBear, BabyBearElem, BabyBearExtElem},
+        Elem,
+    };
 
     use super::*;
     use crate::{
         adapter::{MixState, PolyExt},
-        core::sha_cpu,
-        field::{
-            baby_bear::{BabyBear, BabyBearElem, BabyBearExtElem},
-            Elem,
+        core::{
+            config::{ConfigRng, HashSuite, HashSuitePoseidon, HashSuiteSha256},
+            sha_cpu,
         },
-        hal::cpu::{BabyBearCpuHal, CpuHal},
-        verify::{
-            merkle::MerkleTreeVerifier, read_iop::ReadIOP, CpuVerifyHal, VerificationError,
-            VerifyHal,
-        },
+        hal::cpu::CpuHal,
+        verify::{merkle::MerkleTreeVerifier, read_iop::ReadIOP, CpuVerifyHal, VerificationError},
     };
 
     struct MockCircuit {}
@@ -149,6 +149,10 @@ mod tests {
             unimplemented!()
         }
     }
+
+    type ShaSuite = HashSuiteSha256<BabyBear, sha_cpu::Impl>;
+    type PoseidonSuite = HashSuitePoseidon;
+    type VerifierHal<'a, HS> = CpuVerifyHal<'a, BabyBear, HS, MockCircuit>;
 
     fn init_prover<H: Hal>(
         hal: &H,
@@ -167,28 +171,32 @@ mod tests {
         MerkleTreeProver::new(hal, &matrix, rows, cols, queries)
     }
 
-    fn bad_row_access<H: Hal, S: Sha>(sha: &S, hal: &H, rows: usize, cols: usize, queries: usize) {
-        let prover = init_prover(hal, rows, cols, queries);
-        let mut iop = WriteIOP::new(sha);
+    fn bad_row_access<HS: HashSuite<BabyBear>>(rows: usize, cols: usize, queries: usize) {
+        let hal = CpuHal::<BabyBear, HS>::new();
+        let prover = init_prover(&hal, rows, cols, queries);
+        let mut iop = WriteIOP::<BabyBear, HS::Rng>::new();
         prover.prove(&mut iop, rows);
     }
 
-    fn possibly_bad_verify<S: Sha>(
-        hal: &BabyBearCpuHal,
-        verify_hal: &CpuVerifyHal<S, BabyBear, MockCircuit>,
+    fn bad_row_access_all(rows: usize, cols: usize, queries: usize) {
+        bad_row_access::<ShaSuite>(rows, cols, queries);
+        bad_row_access::<PoseidonSuite>(rows, cols, queries);
+    }
+
+    fn possibly_bad_verify<HS: HashSuite<BabyBear>>(
         rows: usize,
         cols: usize,
         queries: usize,
         bad_query: usize,
         manipulate_proof: bool,
     ) {
-        let sha = verify_hal.sha();
-        let prover = init_prover(hal, rows, cols, queries);
+        let hal = CpuHal::<BabyBear, HS>::new();
+        let prover = init_prover(&hal, rows, cols, queries);
 
-        let mut iop: WriteIOP<S> = WriteIOP::new(sha);
+        let mut iop = WriteIOP::<BabyBear, HS::Rng>::new();
         prover.commit(&mut iop);
         for _query in 0..queries {
-            let r_idx = (iop.rng.next_u32() as usize) % rows;
+            let r_idx = (iop.rng.random_u32() as usize) % rows;
             let col = prover.prove(&mut iop, r_idx);
             for (c_idx, elm) in col.iter().enumerate().take(cols) {
                 assert_eq!(
@@ -197,46 +205,59 @@ mod tests {
                 );
             }
         }
-        {
-            if manipulate_proof {
-                let mut rng = rand::thread_rng();
-                let manip_idx = rng.gen::<usize>() % iop.proof.len();
-                iop.proof[manip_idx] ^= 1;
-            }
-            let mut r_iop = ReadIOP::new(sha, &iop.proof);
-            let verifier = MerkleTreeVerifier::new(verify_hal, &mut r_iop, rows, cols, queries);
-            assert_eq!(verifier.root(), prover.root());
-            let mut err = false;
-            for query in 0..queries {
-                let r_idx = (r_iop.next_u32() as usize) % rows;
-                if query == bad_query {
-                    if rows == 1 {
-                        panic!("Cannot test for bad query if there is only one row");
-                    }
-                    let r_idx = (r_idx + 1) % rows;
-                    let verification = verifier.verify(&mut r_iop, r_idx);
-                    match verification {
-                        Ok(_) => {
-                            panic!("Merkle tree wrongly passed verify when tested on the wrong row")
-                        }
-                        Err(VerificationError::InvalidProof) => {}
-                        Err(_) => panic!("Merkle tree failed validation for an unexpected reason"),
-                    }
-                    err = true;
-                    break;
+        if manipulate_proof {
+            let mut rng = rand::thread_rng();
+            let manip_idx = rng.gen::<usize>() % iop.proof.len();
+            iop.proof[manip_idx] ^= 1;
+        }
+        let mut r_iop = ReadIOP::<BabyBear, HS::Rng>::new(&iop.proof);
+        let verifier = MerkleTreeVerifier::<VerifierHal<HS>>::new(&mut r_iop, rows, cols, queries);
+        assert_eq!(verifier.root(), prover.root());
+        let mut err = false;
+        for query in 0..queries {
+            let r_idx = (r_iop.random_u32() as usize) % rows;
+            if query == bad_query {
+                if rows == 1 {
+                    assert!(false, "Cannot test for bad query if there is only one row");
                 }
-                let col = verifier.verify(&mut r_iop, r_idx).unwrap();
-                for (c_idx, elm) in col.iter().enumerate().take(cols) {
-                    assert_eq!(
-                        *elm,
-                        BabyBearElem::from((u32::MAX / 2) - ((r_idx + c_idx * rows) as u32))
-                    );
+                let r_idx = (r_idx + 1) % rows;
+                let verification = verifier.verify(&mut r_iop, r_idx);
+                match verification {
+                    Ok(_) => assert!(
+                        false,
+                        "Merkle tree wrongly passed verify when tested on the wrong row"
+                    ),
+                    Err(VerificationError::InvalidProof) => {}
+                    Err(_) => assert!(
+                        false,
+                        "Merkle tree failed validation for an unexpected reason"
+                    ),
                 }
+                err = true;
+                break;
             }
-            if !err {
-                r_iop.verify_complete();
+            let col = verifier.verify(&mut r_iop, r_idx).unwrap();
+            for c_idx in 0..cols {
+                assert_eq!(
+                    col[c_idx],
+                    BabyBearElem::from((u32::MAX / 2) - ((r_idx + c_idx * rows) as u32))
+                );
             }
         }
+        if !err {
+            r_iop.verify_complete();
+        }
+    }
+
+    fn possibly_bad_verify_all(
+        rows: usize,
+        cols: usize,
+        queries: usize,
+        bad_query: usize,
+        manipulate_proof: bool,
+    ) {
+        possibly_bad_verify::<ShaSuite>(rows, cols, queries, bad_query, manipulate_proof);
+        possibly_bad_verify::<PoseidonSuite>(rows, cols, queries, bad_query, manipulate_proof);
     }
 
     fn randomize_sizes() -> (usize, usize, usize) {
@@ -253,59 +274,43 @@ mod tests {
     #[test]
     #[should_panic(expected = "assertion failed: idx < self.params.row_size")]
     fn merkle_cpu_1_1_1_bad_row_access() {
-        let sha = sha_cpu::Impl {};
-        let hal: BabyBearCpuHal = CpuHal::new();
-        bad_row_access(&sha, &hal, 1, 1, 1);
+        bad_row_access_all(1, 1, 1);
     }
 
     #[test]
     #[should_panic(expected = "assertion failed: idx < self.params.row_size")]
     fn merkle_cpu_4_4_2_bad_row_access() {
-        let sha = sha_cpu::Impl {};
-        let hal: BabyBearCpuHal = CpuHal::new();
-        bad_row_access(&sha, &hal, 4, 4, 2);
+        bad_row_access_all(4, 4, 2);
     }
 
     #[test]
     #[should_panic(expected = "assertion failed: idx < self.params.row_size")]
     fn merkle_cpu_randomized_bad_row_access() {
-        let sha = sha_cpu::Impl {};
-        let hal: BabyBearCpuHal = CpuHal::new();
         let (rows, cols, queries) = randomize_sizes();
-        bad_row_access(&sha, &hal, rows, cols, queries);
+        bad_row_access_all(rows, cols, queries);
     }
 
     #[test]
     fn merkle_cpu_1_1_1_verify() {
-        let sha = sha_cpu::Impl {};
-        let hal: BabyBearCpuHal = CpuHal::new();
-        let verify_hal = CpuVerifyHal::new(&sha, &MockCircuit {});
-
         // Test a complete verification with no bad queries (by setting bad_query out of
         // range)
-        possibly_bad_verify(&hal, &verify_hal, 1, 1, 1, 4, false);
+        possibly_bad_verify_all(1, 1, 1, 4, false);
     }
 
     #[test]
     fn merkle_cpu_4_4_2_verify() {
-        let sha = sha_cpu::Impl {};
-        let hal: BabyBearCpuHal = CpuHal::new();
-        let verify_hal = CpuVerifyHal::new(&sha, &MockCircuit {});
         // Test a complete verification with no bad queries (by setting bad_query out of
         // range)
-        possibly_bad_verify(&hal, &verify_hal, 4, 4, 2, 4, false);
+        possibly_bad_verify_all(4, 4, 2, 4, false);
     }
 
     #[test]
     fn merkle_cpu_randomized_verify() {
-        let sha = sha_cpu::Impl {};
-        let hal: BabyBearCpuHal = CpuHal::new();
-        let verify_hal = CpuVerifyHal::new(&sha, &MockCircuit {});
         for _rep in 0..100 {
             let (rows, cols, queries) = randomize_sizes();
             // Test a complete verification with no bad queries (by setting bad_query out of
             // range)
-            possibly_bad_verify(&hal, &verify_hal, rows, cols, queries, queries + 1, false);
+            possibly_bad_verify_all(rows, cols, queries, queries + 1, false);
         }
     }
 
@@ -313,78 +318,60 @@ mod tests {
     fn merkle_cpu_2_1_1_bad_query() {
         // n.b. since we test bad queries by incrementing the row, we can't test for a
         // bad query with rows == 1
-        let sha = sha_cpu::Impl {};
-        let hal: BabyBearCpuHal = CpuHal::new();
-        let verify_hal = CpuVerifyHal::new(&sha, &MockCircuit {});
-        possibly_bad_verify(&hal, &verify_hal, 2, 1, 1, 0, false);
+        possibly_bad_verify_all(2, 1, 1, 0, false);
     }
 
     #[test]
     fn merkle_cpu_4_4_2_bad_query() {
         let mut rng = rand::thread_rng();
-        let sha = sha_cpu::Impl {};
-        let hal: BabyBearCpuHal = CpuHal::new();
-        let verify_hal = CpuVerifyHal::new(&sha, &MockCircuit {});
         let queries = 2;
         // Test a complete verification with a bad query
         let bad_query = rng.gen::<usize>() % queries;
-        possibly_bad_verify(&hal, &verify_hal, 4, 4, queries, bad_query, false);
+        possibly_bad_verify_all(4, 4, queries, bad_query, false);
     }
 
     #[test]
     fn merkle_cpu_randomized_bad_query() {
         let mut rng = rand::thread_rng();
-        let sha = sha_cpu::Impl {};
-        let hal: BabyBearCpuHal = CpuHal::new();
-        let verify_hal = CpuVerifyHal::new(&sha, &MockCircuit {});
         let (rows, cols, queries) = randomize_sizes();
         // At least two rows are required to test querying an incorrect row
         let rows = if rows == 1 { 2 } else { rows };
         // Test a complete verification with a bad query
         let bad_query = rng.gen::<usize>() % queries;
-        possibly_bad_verify(&hal, &verify_hal, rows, cols, queries, bad_query, false);
+        possibly_bad_verify_all(rows, cols, queries, bad_query, false);
     }
 
     #[test]
     #[should_panic]
     fn merkle_cpu_1_1_1_verify_manipulated() {
-        let sha = sha_cpu::Impl {};
-        let hal: BabyBearCpuHal = CpuHal::new();
-        let verify_hal = CpuVerifyHal::new(&sha, &MockCircuit {});
         for _rep in 0..50 {
             // Test a verification with a manipulated proof but no bad queries (by setting
             // bad_query out of range) Do this multiple times as the
             // manipulation location is random
-            possibly_bad_verify(&hal, &verify_hal, 1, 1, 1, 2, true);
+            possibly_bad_verify_all(1, 1, 1, 2, true);
         }
     }
 
     #[test]
     #[should_panic]
     fn merkle_cpu_4_4_2_verify_manipulated() {
-        let sha = sha_cpu::Impl {};
-        let hal: BabyBearCpuHal = CpuHal::new();
-        let verify_hal = CpuVerifyHal::new(&sha, &MockCircuit {});
         for _rep in 0..50 {
             // Test a verification with a manipulated proof but no bad queries (by setting
             // bad_query out of range) Do this multiple times as the
             // manipulation location is random
-            possibly_bad_verify(&hal, &verify_hal, 4, 4, 2, 4, true);
+            possibly_bad_verify_all(4, 4, 2, 4, true);
         }
     }
 
     #[test]
     #[should_panic]
     fn merkle_cpu_randomized_verify_manipulated() {
-        let sha = sha_cpu::Impl {};
-        let hal: BabyBearCpuHal = CpuHal::new();
-        let verify_hal = CpuVerifyHal::new(&sha, &MockCircuit {});
         for _rep in 0..50 {
             let (rows, cols, queries) = randomize_sizes();
             // Test a verification with a manipulated proof but no bad queries (by setting
             // bad_query out of range) Do this multiple times as the
             // manipulation location is random
-            possibly_bad_verify(&hal, &verify_hal, rows, cols, queries, queries + 1, true);
+            possibly_bad_verify_all(rows, cols, queries, queries + 1, true);
         }
     }
 }

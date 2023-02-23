@@ -1,4 +1,4 @@
-// Copyright 2022 RISC Zero, Inc.
+// Copyright 2023 RISC Zero, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,12 +15,12 @@
 use std::{ffi::CString, rc::Rc};
 
 use fil_rustacuda as rustacuda;
+use risc0_core::field::{
+    baby_bear::{BabyBearElem, BabyBearExtElem},
+    RootsOfUnity,
+};
 use risc0_zkp::{
     core::log2_ceil,
-    field::{
-        baby_bear::{BabyBearElem, BabyBearExtElem},
-        RootsOfUnity,
-    },
     hal::{
         cuda::{BufferImpl as CudaBuffer, CudaHal},
         Buffer, EvalCheck,
@@ -29,7 +29,11 @@ use risc0_zkp::{
 };
 use rustacuda::{launch, prelude::*};
 
-const KERNELS_FATBIN: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/kernels.fatbin"));
+use crate::{
+    GLOBAL_MIX, GLOBAL_OUT, REGISTER_GROUP_ACCUM, REGISTER_GROUP_CODE, REGISTER_GROUP_DATA,
+};
+
+const KERNELS_FATBIN: &[u8] = include_bytes!(env!("RV32IM_CUDA_PATH"));
 
 pub struct CudaEvalCheck {
     hal: Rc<CudaHal>, // retain a reference to ensure the context remains valid
@@ -49,15 +53,17 @@ impl<'a> EvalCheck<CudaHal> for CudaEvalCheck {
     fn eval_check(
         &self,
         check: &CudaBuffer<BabyBearElem>,
-        code: &CudaBuffer<BabyBearElem>,
-        data: &CudaBuffer<BabyBearElem>,
-        accum: &CudaBuffer<BabyBearElem>,
-        mix: &CudaBuffer<BabyBearElem>,
-        out: &CudaBuffer<BabyBearElem>,
+        groups: &[&CudaBuffer<BabyBearElem>],
+        globals: &[&CudaBuffer<BabyBearElem>],
         poly_mix: BabyBearExtElem,
         po2: usize,
         steps: usize,
     ) {
+        let code = groups[REGISTER_GROUP_CODE];
+        let data = groups[REGISTER_GROUP_DATA];
+        let accum = groups[REGISTER_GROUP_ACCUM];
+        let mix = globals[GLOBAL_MIX];
+        let out = globals[GLOBAL_OUT];
         log::debug!(
             "check: {}, code: {}, data: {}, accum: {}, mix: {} out: {}",
             check.size(),
@@ -109,7 +115,7 @@ impl<'a> EvalCheck<CudaHal> for CudaEvalCheck {
 mod tests {
     use std::rc::Rc;
 
-    use risc0_zkp::hal::{cpu::BabyBearCpuHal, cuda::CudaHal};
+    use risc0_zkp::hal::{cpu::BabyBearSha256CpuHal, cuda::CudaHal};
     use test_log::test;
 
     use crate::cpu::CpuEvalCheck;
@@ -118,7 +124,7 @@ mod tests {
     fn eval_check() {
         const PO2: usize = 4;
         let circuit = crate::CircuitImpl::new();
-        let cpu_hal = BabyBearCpuHal::new();
+        let cpu_hal = BabyBearSha256CpuHal::new();
         let cpu_eval = CpuEvalCheck::new(&circuit);
         let gpu_hal = Rc::new(CudaHal::new());
         let gpu_eval = super::CudaEvalCheck::new(gpu_hal.clone());

@@ -1,4 +1,4 @@
-// Copyright 2022 RISC Zero, Inc.
+// Copyright 2023 RISC Zero, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,10 @@ use std::{cell::RefCell, ffi::CString, marker::PhantomData, rc::Rc};
 
 use bytemuck::Pod;
 use fil_rustacuda as rustacuda;
+use risc0_core::field::{
+    baby_bear::{BabyBear, BabyBearElem, BabyBearExtElem},
+    Elem, ExtElem, RootsOfUnity,
+};
 use rustacuda::{
     device::DeviceAttribute,
     function::{BlockSize, GridSize},
@@ -25,23 +29,23 @@ use rustacuda::{
 use rustacuda_core::UnifiedPointer;
 
 use crate::{
-    core::{log2_ceil, sha::Digest},
-    field::{
-        baby_bear::{BabyBearElem, BabyBearExtElem},
-        Elem, ExtElem, RootsOfUnity,
+    core::{
+        config::{ConfigHashSha256, HashSuiteSha256},
+        log2_ceil,
+        sha::Digest,
+        sha_cpu,
+        sha_rng::ShaRng,
     },
     hal::{Buffer, Hal},
     FRI_FOLD,
 };
 
-const KERNELS_FATBIN: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/kernels.fatbin"));
+const KERNELS_FATBIN: &[u8] = include_bytes!(env!("ZKP_CUDA_PATH"));
 
 pub struct CudaHal {
     pub max_threads: u32,
     pub module: Module,
-    // This is marked ManuallyDrop because otherwise we get errors like
-    // 'Failed to unload CUDA module: ContextIsDestroyed'
-    _context: core::mem::ManuallyDrop<Context>,
+    _context: Context,
 }
 
 struct RawBuffer {
@@ -153,7 +157,7 @@ impl CudaHal {
         Self {
             max_threads: max_threads as u32,
             module,
-            _context: core::mem::ManuallyDrop::new(context),
+            _context: context,
         }
     }
 
@@ -200,11 +204,16 @@ impl CudaHal {
 impl Hal for CudaHal {
     type Elem = BabyBearElem;
     type ExtElem = BabyBearExtElem;
+    type Field = BabyBear;
 
     type BufferDigest = BufferImpl<Digest>;
     type BufferElem = BufferImpl<Self::Elem>;
     type BufferExtElem = BufferImpl<Self::ExtElem>;
     type BufferU32 = BufferImpl<u32>;
+
+    type HashSuite = HashSuiteSha256<BabyBear, sha_cpu::Impl>;
+    type Hash = ConfigHashSha256<sha_cpu::Impl>;
+    type Rng = ShaRng<sha_cpu::Impl>;
 
     fn alloc_elem(&self, name: &'static str, size: usize) -> Self::BufferElem {
         BufferImpl::new(name, size)
@@ -546,7 +555,7 @@ impl Hal for CudaHal {
     }
 
     #[tracing::instrument(skip_all)]
-    fn sha_rows(&self, output: &Self::BufferDigest, matrix: &Self::BufferElem) {
+    fn hash_rows(&self, output: &Self::BufferDigest, matrix: &Self::BufferElem) {
         let row_size = output.size();
         let col_size = matrix.size() / output.size();
         assert_eq!(matrix.size(), col_size * row_size);
@@ -567,7 +576,7 @@ impl Hal for CudaHal {
         stream.synchronize().unwrap();
     }
 
-    fn sha_fold(&self, io: &Self::BufferDigest, input_size: usize, output_size: usize) {
+    fn hash_fold(&self, io: &Self::BufferDigest, input_size: usize, output_size: usize) {
         assert_eq!(input_size, 2 * output_size);
 
         let stream = Stream::new(StreamFlags::DEFAULT, None).unwrap();
@@ -633,14 +642,14 @@ mod tests {
 
     #[test]
     #[serial]
-    fn sha_rows() {
-        testutil::sha_rows(CudaHal::new());
+    fn hash_rows() {
+        testutil::hash_rows(CudaHal::new());
     }
 
     #[test]
     #[serial]
-    fn sha_fold() {
-        testutil::sha_fold(CudaHal::new());
+    fn hash_fold() {
+        testutil::hash_fold(CudaHal::new());
     }
 
     #[test]
