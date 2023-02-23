@@ -81,8 +81,8 @@ impl Risc0Method {
         // Quick check for '#' to avoid injection of arbitrary Rust code into the the
         // method.rs file. This would not be a serious issue since it would only
         // affect the user that set the path, but it's good to add a check.
-        if let Some(_) = elf_path.to_string().find("#") {
-            panic!("method path cannot include #: {}", elf_path);
+        if elf_path.to_string().find('#').is_some() {
+            panic!("method path cannot include #: {elf_path}");
         }
 
         let upper = self.name.to_uppercase();
@@ -443,7 +443,7 @@ impl Default for GuestOptions {
 /// See [embed_methods].
 pub fn embed_methods_with_options(mut guest_pkg_to_options: HashMap<&str, GuestOptions>) {
     let skip_var_name = "RISC0_SKIP_BUILD";
-    println!("cargo:rerun-if-env-changed={}", skip_var_name);
+    println!("cargo:rerun-if-env-changed={skip_var_name}");
     if env::var(skip_var_name).is_ok() {
         return;
     }

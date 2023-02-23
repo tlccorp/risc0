@@ -59,7 +59,7 @@ enum MemoryOp {
 }
 
 impl MemoryOp {
-    fn as_u32(self) -> u32 {
+    fn into_u32(self) -> u32 {
         self as u32
     }
 }
@@ -113,8 +113,8 @@ impl MemoryState {
         // debug!("load_u32: 0x{addr:08X}");
         assert_eq!(addr % WORD_SIZE as u32, 0, "unaligned load");
         let mut bytes = [0u8; WORD_SIZE];
-        for i in 0..WORD_SIZE {
-            bytes[i] = self.load_u8(addr + i as u32);
+        for (i, elm) in bytes.iter_mut().enumerate().take(WORD_SIZE) {
+            *elm = self.load_u8(addr + i as u32);
         }
         u32::from_le_bytes(bytes)
     }
@@ -223,7 +223,7 @@ enum MajorType {
 }
 
 impl MajorType {
-    fn as_u32(self) -> u32 {
+    fn into_u32(self) -> u32 {
         self as u32
     }
 }
@@ -424,10 +424,10 @@ impl<'a, H: HostHandler> MachineContext<'a, H> {
         // faults.dump();
         for page_idx in faults.reads {
             if !self.memory.pages.contains(&page_idx) {
-                return Ok(MajorType::PageFault.as_u32().into());
+                return Ok(MajorType::PageFault.into_u32().into());
             }
         }
-        Ok(opcode.major.as_u32().into())
+        Ok(opcode.major.into_u32().into())
     }
 
     fn get_page_faults(&self, pc: u32, inst: u32, opcode: &OpCode) -> PageFaults {
@@ -462,8 +462,8 @@ impl<'a, H: HostHandler> MachineContext<'a, H> {
                 let code_addr = self.memory.load_register(REG_A0);
                 let args_addr = self.memory.load_register(REG_A1);
                 let code_end = self.memory.load_register(REG_A2);
-                let const_addr = self.memory.load_u32(args_addr + (0 * WORD_SIZE) as u32);
-                let input_addr = self.memory.load_u32(args_addr + (1 * WORD_SIZE) as u32);
+                let const_addr = self.memory.load_u32(args_addr);
+                let input_addr = self.memory.load_u32(args_addr + WORD_SIZE as u32);
                 let output_addr = self.memory.load_u32(args_addr + (2 * WORD_SIZE) as u32);
                 for addr in (code_addr..code_end).step_by(WORD_SIZE) {
                     faults.include(addr);
@@ -531,12 +531,9 @@ impl<'a, H: HostHandler> MachineContext<'a, H> {
         numer: BabyBearTup,
         denom: BabyBearTup,
         sign: BabyBearElem,
-    ) -> (
-        (BabyBearElem, BabyBearElem, BabyBearElem, BabyBearElem),
-        (BabyBearElem, BabyBearElem, BabyBearElem, BabyBearElem),
-    ) {
-        let mut numer = merge_word8(numer) as u32;
-        let mut denom = merge_word8(denom) as u32;
+    ) -> (BabyBearTup, BabyBearTup) {
+        let mut numer = merge_word8(numer);
+        let mut denom = merge_word8(denom);
         let sign: u32 = sign.into();
         // debug!("divide: [{sign}] {numer} / {denom}");
         let ones_comp = (sign == 2) as u32;
@@ -642,27 +639,21 @@ impl<'a, H: HostHandler> MachineContext<'a, H> {
         trace!("{}", formatted);
     }
 
-    fn ram_read(
-        &mut self,
-        addr: BabyBearElem,
-        op: BabyBearElem,
-    ) -> (BabyBearElem, BabyBearElem, BabyBearElem, BabyBearElem) {
+    fn ram_read(&mut self, addr: BabyBearElem, op: BabyBearElem) -> BabyBearTup {
         let addr: u32 = addr.into();
         let op: u32 = op.into();
-        if op == MemoryOp::PageIn.as_u32() {
+        if op == MemoryOp::PageIn.into_u32() {
             if self.memory.resident.replace(addr).is_some() {
                 panic!("Memory read already marked for page in: 0x{addr:08x}");
             }
-        } else {
-            if !self.memory.resident.contains(&addr) {
-                let addr = addr * WORD_SIZE as u32;
-                if addr >= self.memory.ram.info.mem_start {
-                    let page_idx = self.memory.ram.info.get_page_index(addr);
-                    let entry_addr = self.memory.ram.info.get_page_entry_addr(page_idx);
-                    debug!("  ram_read: 0x{addr:08x}, op: {op:?}, entry_addr: 0x{entry_addr:08x}");
-                }
-                panic!("Memory read before page in: 0x{addr:08x}");
+        } else if !self.memory.resident.contains(&addr) {
+            let addr = addr * WORD_SIZE as u32;
+            if addr >= self.memory.ram.info.mem_start {
+                let page_idx = self.memory.ram.info.get_page_index(addr);
+                let entry_addr = self.memory.ram.info.get_page_entry_addr(page_idx);
+                debug!("  ram_read: 0x{addr:08x}, op: {op:?}, entry_addr: 0x{entry_addr:08x}");
             }
+            panic!("Memory read before page in: 0x{addr:08x}");
         }
         if addr as usize * WORD_SIZE >= FFPU.start() {
             let ffpu_addr = addr as usize - FFPU.start() / WORD_SIZE;
@@ -686,7 +677,7 @@ impl<'a, H: HostHandler> MachineContext<'a, H> {
     ) -> Result<()> {
         let addr: u32 = addr.into();
         let op: u32 = op.into();
-        if op == MemoryOp::PageIn.as_u32() {
+        if op == MemoryOp::PageIn.into_u32() {
             if self.memory.resident.replace(addr).is_some() {
                 panic!("Memory write already marked for page in: 0x{addr:08x}");
             }

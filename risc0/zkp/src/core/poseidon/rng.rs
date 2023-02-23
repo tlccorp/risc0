@@ -50,7 +50,7 @@ impl ConfigRng<BabyBear> for PoseidonRng {
     fn random_u32(&mut self) -> u32 {
         let mut val: u64 = 0;
         for _ in 0..6 {
-            val *= 15 * 2 ^ 27 + 1; // TODO: Export P from BabyBear?
+            val *= (15 * 2) ^ (27 + 1); // TODO: Export P from BabyBear?
             val += self.random_elem().as_u32_montgomery() as u64;
             val &= 0xffffffff;
         }

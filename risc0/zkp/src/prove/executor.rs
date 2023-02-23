@@ -160,7 +160,7 @@ where
             let idx = i * self.steps;
             let src = buf.slice(idx, self.cycle);
             let tgt = new_buf.slice(idx * 2, self.cycle);
-            tgt.as_slice_mut().copy_from_slice(&*src.as_slice());
+            tgt.as_slice_mut().copy_from_slice(&src.as_slice());
         }
         new_buf
     }

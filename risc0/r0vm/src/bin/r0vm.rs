@@ -97,7 +97,7 @@ fn run_prover(
     opts: ProverOpts,
     initial_input: Option<Vec<u8>>,
 ) -> Result<(Receipt, Vec<u8>)> {
-    let mut prover = Prover::new_with_opts(elf_contents, image_id.clone(), opts).unwrap();
+    let mut prover = Prover::new_with_opts(elf_contents, *image_id, opts).unwrap();
     if let Some(bytes) = initial_input {
         prover.add_input_u8_slice(bytes.as_slice());
     }
@@ -140,19 +140,14 @@ fn main() {
         // generate an actual proof.
         Digest::from([0; DIGEST_WORDS])
     } else {
-        read_image_id(
-            args.verbose,
-            &args.elf,
-            args.image_id.as_ref().map(|p| p.as_path()),
-        )
-        .unwrap_or_else(|| {
+        read_image_id(args.verbose, &args.elf, args.image_id.as_deref()).unwrap_or_else(|| {
             if args.verbose > 0 {
                 eprintln!("Computing image id");
             }
             let program = Program::load_elf(&elf_contents, MEM_SIZE as u32).unwrap();
             let image = MemoryImage::new(&program, PAGE_SIZE as u32);
             if let Some(image_id_file) = args.image_id.as_ref() {
-                std::fs::write(&image_id_file, image.root.as_bytes()).unwrap();
+                std::fs::write(image_id_file, image.root.as_bytes()).unwrap();
                 if args.verbose > 0 {
                     eprintln!("Saved image id to {}", image_id_file.display());
                 }

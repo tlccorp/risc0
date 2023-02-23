@@ -101,7 +101,7 @@ impl ComputedConstants {
 // A function to turns a string of hex constants into a vector of Elems
 fn to_elems(input_string: &str) -> Vec<Elem> {
     let mut out = Vec::<Elem>::new();
-    for part in input_string.split(",") {
+    for part in input_string.split(',') {
         let tidy_part: String = part
             .chars()
             .filter(|c| "0123456789abcdef".contains(*c))
@@ -110,13 +110,13 @@ fn to_elems(input_string: &str) -> Vec<Elem> {
         assert!(num < (FIELD as u32));
         out.push(Elem::new(num));
     }
-    return out;
+    out
 }
 
 // The code that parses the textual output from sage into the constants
 fn extract_from_sage(consts: &mut ComputedConstants, stdout: &str) {
     // Split stdout into lines
-    let out_lines: Vec<&str> = stdout.split("\n").collect();
+    let out_lines: Vec<&str> = stdout.split('\n').collect();
 
     // Match the first line and extract the computed values
     let regex = Regex::new("n=31, t=24, alpha=7, M=128, R_F=([0-9]+), R_P=([0-9]+)").unwrap();
@@ -179,7 +179,7 @@ fn run_sage() -> String {
         .arg(CELLS.to_string()) // Number of cells
         .arg(ALPHA.to_string()) // Alpha
         .arg(SECURITY.to_string()) // Desired security level
-        .arg(format!("{:x}", FIELD)) // P in hex i.e. 15*2^27 + 1
+        .arg(format!("{FIELD:x}")) // P in hex i.e. 15*2^27 + 1
         .stdout(Stdio::piped()) // Pipe output
         .spawn()
         .unwrap();
@@ -218,7 +218,7 @@ fn compute_partial_compression(consts: &mut ComputedConstants) {
     for round in 0..rounds_partial {
         // Add the constants to the current offset
         for i in 0..CELLS {
-            cur_offset[i] = cur_offset[i] + round_constants[(rounds_half_full + round) * CELLS + i];
+            cur_offset[i] += round_constants[(rounds_half_full + round) * CELLS + i]
         }
         // Write data for this round's sbox based on CELL 0
         final_offset[CELLS + round] = cur_offset[0];
@@ -226,8 +226,8 @@ fn compute_partial_compression(consts: &mut ComputedConstants) {
             final_matrix[(CELLS + round) * row_size + i] = cur_matrix[i];
         }
         // Now, replace the 0th row so it is purely determined by rounds box
-        for i in 0..row_size {
-            cur_matrix[i] = if i == CELLS + round {
+        for (i, elm) in cur_matrix.iter_mut().enumerate().take(row_size) {
+            *elm = if i == CELLS + round {
                 Elem::new(1)
             } else {
                 Elem::new(0)
@@ -236,7 +236,7 @@ fn compute_partial_compression(consts: &mut ComputedConstants) {
         cur_offset[0] = Elem::new(0);
         // Now, do the mds multiply.
         let old_matrix = cur_matrix.clone();
-        let old_offset = cur_offset.clone();
+        let old_offset = cur_offset;
         for i in 0..CELLS {
             for j in 0..row_size {
                 let mut tot = Elem::new(0);
@@ -287,25 +287,25 @@ struct RustLanguageExporter {}
 
 impl RustLanguageExporter {
     fn new() -> Self {
-        print!("{}", RUST_HEADER);
+        print!("{RUST_HEADER}");
         RustLanguageExporter {}
     }
 }
 
 impl LanguageExporter for RustLanguageExporter {
     fn export_constant(&self, name: &str, value: usize) {
-        println!("pub const {}: usize = {};", name, value);
+        println!("pub const {name}: usize = {value};");
     }
 
     fn export_array(&self, name: &str, elems: &[Elem]) {
-        println!("");
-        println!("pub const {}: &'static [Elem] = &baby_bear_array![", name);
+        println!();
+        println!("pub const {name}: &[Elem] = &baby_bear_array![");
         for line in elems.chunks(8) {
             print!("   ");
             for elem in line {
                 print!(" 0x{:08x},", elem.as_u32())
             }
-            println!("");
+            println!();
         }
         println!("];");
     }
@@ -315,25 +315,25 @@ struct CppLanguageExporter {}
 
 impl CppLanguageExporter {
     fn new() -> Self {
-        print!("{}", CPP_HEADER);
+        print!("{CPP_HEADER}");
         CppLanguageExporter {}
     }
 }
 
 impl LanguageExporter for CppLanguageExporter {
     fn export_constant(&self, name: &str, value: usize) {
-        println!("constexpr size_t {} = {};", name, value);
+        println!("constexpr size_t {name} = {value};");
     }
 
     fn export_array(&self, name: &str, elems: &[Elem]) {
-        println!("");
-        println!("constexpr uint64_t {}[{}] = {{", name, elems.len());
+        println!();
+        println!("constexpr uint64_t {name}[{}] = {{", elems.len());
         for line in elems.chunks(8) {
             print!("   ");
             for elem in line {
                 print!(" 0x{:08x},", elem.as_u32())
             }
-            println!("");
+            println!();
         }
         println!("}};");
     }
@@ -359,6 +359,6 @@ fn main() {
         let exporter = CppLanguageExporter::new();
         exporter.export(&consts);
     } else {
-        assert!(false);
+        panic!();
     }
 }

@@ -249,7 +249,7 @@ mod host {
             let tap_cache = tap_cache.as_ref().unwrap();
 
             for (reg, cur) in zip(taps.regs(), tap_cache.tap_mix_pows.iter()) {
-                tot[reg.combo_id()] += *cur * rows[reg.group() as usize][reg.offset()];
+                tot[reg.combo_id()] += *cur * rows[reg.group()][reg.offset()];
             }
             for (i, cur) in zip(0..Self::CHECK_SIZE, tap_cache.check_mix_pows.iter()) {
                 tot[combo_count] += *cur * check_row[i];
@@ -304,7 +304,7 @@ where
     adapter.execute(&mut iop);
 
     let io = adapter.out.ok_or(VerificationError::ReceiptFormatError)?;
-    check_globals(&io)?;
+    check_globals(io)?;
 
     // Get the size
     let po2 = adapter.po2();

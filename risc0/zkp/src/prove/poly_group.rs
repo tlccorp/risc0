@@ -56,7 +56,7 @@ pub struct PolyGroup<H: Hal> {
     pub merkle: MerkleTreeProver<H>,
 }
 
-impl<'a, H: Hal> PolyGroup<H> {
+impl<H: Hal> PolyGroup<H> {
     #[tracing::instrument(name = "PolyGroup", skip_all, fields(name = _name))]
     pub fn new(
         hal: &H,
@@ -68,9 +68,9 @@ impl<'a, H: Hal> PolyGroup<H> {
         assert_eq!(coeffs.size(), count * size);
         let domain = size * INV_RATE;
         let evaluated = hal.alloc_elem("evaluated", count * domain);
-        hal.batch_expand(&evaluated, coeffs, count);
+        hal.batch_expand(&evaluated, &coeffs, count);
         hal.batch_evaluate_ntt(&evaluated, count, log2_ceil(INV_RATE));
-        hal.batch_bit_reverse(coeffs, count);
+        hal.batch_bit_reverse(&coeffs, count);
         let merkle = MerkleTreeProver::new(hal, &evaluated, domain, count, QUERIES);
         PolyGroup {
             coeffs,

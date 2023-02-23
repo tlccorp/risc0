@@ -53,12 +53,11 @@ impl<F: Field, HS: HashSuite<F>> CpuHal<F, HS> {
     }
 }
 
-impl<E: Elem, EE: ExtElem> Default for CpuHal<E, EE> {
+impl<F: Field, HS: HashSuite<F>> Default for CpuHal<F, HS> {
     fn default() -> Self {
         Self::new()
     }
 }
-
 #[derive(Debug, Clone)]
 struct Region(usize, usize);
 
@@ -141,7 +140,7 @@ impl<'a, T: Default + Clone + Pod> SyncSlice<'a, T> {
         SyncSlice {
             _buf: SyncSliceRef::FromSlice(self),
             ptr: unsafe { self.ptr.add(offset) },
-            size: size,
+            size,
         }
     }
 
@@ -181,7 +180,7 @@ impl<T: Default + Clone + Pod> CpuBuffer<T> {
         }
     }
 
-    pub fn as_slice<'a>(&'a self) -> Ref<'a, [T]> {
+    pub fn as_slice(&self) -> Ref<[T]> {
         let vec = self.buf.borrow();
         Ref::map(vec, |vec| {
             let slice = bytemuck::cast_slice(vec);
@@ -197,7 +196,7 @@ impl<T: Default + Clone + Pod> CpuBuffer<T> {
         })
     }
 
-    pub fn as_slice_sync<'a>(&'a self) -> SyncSlice<'a, T> {
+    pub fn as_slice_sync(&self) -> SyncSlice<T> {
         SyncSlice::new(self.as_slice_mut())
     }
 }
@@ -539,7 +538,7 @@ impl<F: Field, HS: HashSuite<F>> Hal for CpuHal<F, HS> {
         let output = io.slice(output_size, output_size);
         let input = io.slice(input_size, input_size);
         (0..output.size()).into_par_iter().for_each(|idx| {
-            let in1 = input.get(2 * idx + 0);
+            let in1 = input.get(2 * idx);
             let in2 = input.get(2 * idx + 1);
             output.set(idx, *Self::Hash::hash_pair(&in1, &in2));
         });

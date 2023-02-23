@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub const CONTROL_ID: [&'static str; risc0_zkp::MAX_CYCLES_PO2 - risc0_zkp::MIN_CYCLES_PO2] = [
+pub const CONTROL_ID: [&str; risc0_zkp::MAX_CYCLES_PO2 - risc0_zkp::MIN_CYCLES_PO2] = [
     "26aaf5e87e2df3a5b2ba1c07764a9755b8fa5221b5f0bfd96a129427d016ece1", //
     "f9ec28d3b9cea704a33a130529ef1e75cb5f510ca1de612acc78846f359c6238", //
     "81aa8820d35d26c8c59ff074969f4eb73eae5921ab43903fe8b7118a600e3120", //
@@ -28,8 +28,7 @@ pub const CONTROL_ID: [&'static str; risc0_zkp::MAX_CYCLES_PO2 - risc0_zkp::MIN_
     "29260d269d38036082e666aa221d3b977881eab8accdaa1ff5fd8b30b0b06e5d", //
 ];
 
-pub const POSEIDON_CONTROL_ID: [&'static str;
-    risc0_zkp::MAX_CYCLES_PO2 - risc0_zkp::MIN_CYCLES_PO2] = [
+pub const POSEIDON_CONTROL_ID: [&str; risc0_zkp::MAX_CYCLES_PO2 - risc0_zkp::MIN_CYCLES_PO2] = [
     "5c836f57798f110a16f9cf4c698a7503d3360404cd0c5853581067201832cb54", //
     "ffe3567178f68d5b9feec90cb772852f2030b85563fd51240b1635215fb74921", //
     "9983743f036f104b1d06471ef679e74967d44c083fe37974e2fe7502f212790b", //

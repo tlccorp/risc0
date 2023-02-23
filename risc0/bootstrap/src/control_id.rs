@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub const CONTROL_ID: [&'static str; risc0_zkp::MAX_CYCLES_PO2 - risc0_zkp::MIN_CYCLES_PO2] = [
+pub const CONTROL_ID: [&str; risc0_zkp::MAX_CYCLES_PO2 - risc0_zkp::MIN_CYCLES_PO2] = [
     "{}", //
     "{}", //
     "{}", //
@@ -28,7 +28,7 @@ pub const CONTROL_ID: [&'static str; risc0_zkp::MAX_CYCLES_PO2 - risc0_zkp::MIN_
     "{}", //
 ];
 
-pub const POSEIDON_CONTROL_ID: [&'static str; risc0_zkp::MAX_CYCLES_PO2 - risc0_zkp::MIN_CYCLES_PO2] = [
+pub const POSEIDON_CONTROL_ID: [&str; risc0_zkp::MAX_CYCLES_PO2 - risc0_zkp::MIN_CYCLES_PO2] = [
     "{}", //
     "{}", //
     "{}", //
@@ -43,4 +43,3 @@ pub const POSEIDON_CONTROL_ID: [&'static str; risc0_zkp::MAX_CYCLES_PO2 - risc0_
     "{}", //
     "{}", //
 ];
-

@@ -104,17 +104,6 @@ impl<'a> ProverOpts<'a> {
     }
 }
 
-impl<'a> Default for ProverOpts<'a> {
-    fn default() -> ProverOpts<'a> {
-        ProverOpts {
-            skip_seal: false,
-            skip_verify: false,
-            sendrecv_callbacks: HashMap::new(),
-            trace_callback: None,
-        }
-    }
-}
-
 /// Manages communication with and execution of a zkVM [Program]
 pub struct Prover<'a> {
     elf: Program,

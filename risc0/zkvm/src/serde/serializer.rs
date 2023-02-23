@@ -24,7 +24,7 @@ use super::{
     err::{Error, Result},
 };
 
-pub fn to_vec<'a, T>(value: &'a T) -> Result<Vec<u32>>
+pub fn to_vec<T>(value: &T) -> Result<Vec<u32>>
 where
     T: Serialize + ?Sized,
 {
@@ -36,7 +36,7 @@ where
     serializer.stream.release()
 }
 
-pub fn to_vec_with_capacity<'a, T>(value: &'a T, cap: usize) -> Result<Vec<u32>>
+pub fn to_vec_with_capacity<T>(value: &T, cap: usize) -> Result<Vec<u32>>
 where
     T: Serialize + ?Sized,
 {

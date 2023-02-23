@@ -124,7 +124,7 @@ impl ConfigHash<BabyBear> for ConfigHashPoseidon {
 
     fn hash_ext_elem_slice(slice: &[BabyBearExtElem]) -> Self::DigestPtr {
         to_digest(unpadded_hash(
-            slice.iter().map(|ee| ee.subelems().iter()).flatten(),
+            slice.iter().flat_map(|ee| ee.subelems().iter()),
         ))
     }
 }

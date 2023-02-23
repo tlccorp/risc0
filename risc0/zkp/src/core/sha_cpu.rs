@@ -175,7 +175,7 @@ impl Sha256 for Impl {
         // SAFETY: We know that the two types have the same memory layout, so this
         // conversion is known to be safe.
         match unsafe { blocks.align_to::<GenericArray<u8, U64>>() } {
-            (&[], aligned_blocks, &[]) => sha2::compress256(&mut state, &aligned_blocks),
+            (&[], aligned_blocks, &[]) => sha2::compress256(&mut state, aligned_blocks),
             _ => unreachable!("alignment will always be satisfied for block conversion"),
         };
 

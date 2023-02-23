@@ -66,7 +66,7 @@ where
     /// Perform initial 'execution' setting code + data.
     /// Additionally, write any 'results' as needed.
     pub fn execute<R: ConfigRng<F>>(&mut self, iop: &mut WriteIOP<F, R>) {
-        iop.write_field_elem_slice(&*self.exec.io.as_slice());
+        iop.write_field_elem_slice(&self.exec.io.as_slice());
         iop.write_u32_slice(&[self.exec.po2 as u32]);
     }
 
