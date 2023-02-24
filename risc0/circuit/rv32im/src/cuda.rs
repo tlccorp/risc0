@@ -48,7 +48,7 @@ impl CudaEvalCheck {
     }
 }
 
-impl<'a> EvalCheck<CudaHal> for CudaEvalCheck {
+impl EvalCheck<CudaHal> for CudaEvalCheck {
     #[tracing::instrument(skip_all)]
     fn eval_check(
         &self,

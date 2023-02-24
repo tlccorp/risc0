@@ -263,7 +263,7 @@ impl Hal for CudaHal {
         let stream = Stream::new(StreamFlags::DEFAULT, None).unwrap();
         let kernel_name = CString::new("batch_expand").unwrap();
         let kernel = self.module.get_function(&kernel_name).unwrap();
-        let params = self.compute_simple_params(out_size.try_into().unwrap());
+        let params = self.compute_simple_params(out_size);
         unsafe {
             launch!(kernel<<<params.0, params.1, 0, stream>>>(
                 output.as_device_ptr(),
@@ -334,7 +334,7 @@ impl Hal for CudaHal {
             stream.synchronize().unwrap();
         }
 
-        let io_size = io.size().try_into().unwrap();
+        let io_size = io.size();
         let params = self.compute_simple_params(io_size);
         let kernel_name = CString::new("eltwise_mul_factor_fp").unwrap();
         let kernel = self.module.get_function(&kernel_name).unwrap();
