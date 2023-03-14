@@ -15,7 +15,9 @@
 use anyhow::{bail, Result};
 use risc0_zkp::core::sha::{Digest, Sha256, BLOCK_BYTES, SHA256_INIT};
 use risc0_zkvm_platform::{
+    memory,
     memory::{MEM_SIZE, PAGE_TABLE},
+    syscall::reg_abi::REG_SP,
     syscall::DIGEST_BYTES,
     WORD_SIZE,
 };
@@ -129,6 +131,12 @@ impl MemoryImage {
                 image[addr + i] = bytes[i];
             }
         }
+
+        // Set initial stack pointer to point to default stack top.
+        // This lets us work with standard crt0s that expect SP to
+        // already be set.
+        let sp = memory::SYSTEM.start() + WORD_SIZE * REG_SP;
+        image[sp..(sp + WORD_SIZE)].clone_from_slice(&(memory::STACK.start() as u32).to_le_bytes());
 
         // Compute the page table hashes except for the very last root hash.
         let info = PageTableInfo::new(PAGE_TABLE.start() as u32, page_size);
