@@ -155,6 +155,7 @@ macro_rules! impl_syscall {
        )?
      )?) => {
         /// Invoke a raw system call
+        #[no_mangle]
         pub unsafe extern "C" fn $func_name(syscall: SyscallName,
                                  from_host: *mut u32,
                                  from_host_words: usize
@@ -204,6 +205,7 @@ impl_syscall!(syscall_4, a3, a4, a5, a6);
 impl_syscall!(syscall_5, a3, a4, a5, a6, a7);
 
 #[inline(always)]
+#[no_mangle]
 pub unsafe fn sys_halt() {
     #[cfg(target_os = "zkvm")]
     {
@@ -218,6 +220,7 @@ pub unsafe fn sys_halt() {
 }
 
 #[inline(always)]
+#[no_mangle]
 pub unsafe fn sys_output(output_id: u32, output_value: u32) {
     assert!(
         output_id < 9,
@@ -237,6 +240,7 @@ pub unsafe fn sys_output(output_id: u32, output_value: u32) {
 }
 
 #[inline(always)]
+#[no_mangle]
 pub unsafe fn sys_sha_compress(
     out_state: *mut [u32; DIGEST_WORDS],
     in_state: *const [u32; DIGEST_WORDS],
@@ -260,6 +264,7 @@ pub unsafe fn sys_sha_compress(
 }
 
 #[inline(always)]
+#[no_mangle]
 pub unsafe fn sys_sha_buffer(
     out_state: *mut [u32; DIGEST_WORDS],
     in_state: *const [u32; DIGEST_WORDS],
@@ -282,19 +287,23 @@ pub unsafe fn sys_sha_buffer(
     unimplemented!()
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn sys_rand(recv_buf: *mut u32, words: usize) {
     syscall_0(nr::SYS_RANDOM, recv_buf, words);
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn sys_panic(msg_ptr: *const u8, len: usize) -> ! {
     syscall_2(nr::SYS_PANIC, null_mut(), 0, msg_ptr as u32, len as u32);
     unreachable!()
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn sys_log(msg_ptr: *const u8, len: usize) {
     syscall_2(nr::SYS_LOG, null_mut(), 0, msg_ptr as u32, len as u32);
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn sys_cycle_count() -> usize {
     let Return(a0, _) = syscall_0(nr::SYS_CYCLE_COUNT, null_mut(), 0);
     a0 as usize
@@ -308,6 +317,7 @@ pub unsafe extern "C" fn sys_cycle_count() -> usize {
 /// read at least one byte.
 ///
 /// Users should prefer a higher-level abstraction.
+#[no_mangle]
 pub unsafe extern "C" fn sys_read(fd: u32, recv_buf: *mut u8, nrequested: usize) -> usize {
     // The SYS_READ system call can do a given number of word-aligned reads
     // efficiently. The semantics of the system call are:
@@ -383,6 +393,7 @@ pub unsafe extern "C" fn sys_read(fd: u32, recv_buf: *mut u8, nrequested: usize)
     nread
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn sys_write(fd: u32, write_buf: *const u8, nbytes: usize) {
     syscall_3(
         nr::SYS_WRITE,

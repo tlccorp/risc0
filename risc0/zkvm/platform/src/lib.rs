@@ -65,8 +65,11 @@ mod handlers {
 
     #[panic_handler]
     fn panic_fault(panic_info: &PanicInfo) -> ! {
-        let msg = ::alloc::format!("{}", panic_info);
-        crate::abort(&msg)
+        if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+            crate::abort(s)
+        } else {
+            crate::abort("panic occurred");
+        }
     }
 
     #[alloc_error_handler]
