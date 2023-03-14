@@ -26,7 +26,7 @@ cfg-if = "1.0"
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 risc0-circuit-rv32im = { workspace = true }
 risc0-core = { workspace = true }
-risc0-zeroio = { workspace = true }
+risc0-zeroio = { workspace = true, default-features = false }
 risc0-zkp = { workspace = true }
 risc0-zkvm-platform = { workspace = true }
 serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
@@ -83,4 +83,4 @@ prove = [
   "risc0-zkp/prove",
   "std",
 ]
-std = ["anyhow/std", "risc0-circuit-rv32im/std", "risc0-zeroio/std", "risc0-zkp/std", "serde/std"]
+std = ["anyhow/std", "risc0-circuit-rv32im/std", "risc0-zeroio/std", "risc0-zkp/std", "serde/std", "risc0-zkvm-platform/std"]

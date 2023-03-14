@@ -7,6 +7,9 @@ license = { workspace = true }
 homepage = { workspace = true }
 repository = { workspace = true }
 
+[lib]
+crate-type = ["staticlib", "lib"]
+
 # This crate is a potential dependency of the rust standard library.
 # As such, it should not depend on anything the rust standard library
 # doesn't.
@@ -20,4 +23,5 @@ core = { optional = true, package = "rustc-std-workspace-core", version = "1.0.0
 
 [features]
 default = []
+std = []
 rustc-dep-of-std = ["core", "compiler_builtins"]

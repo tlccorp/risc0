@@ -13,13 +13,20 @@
 // limitations under the License.
 
 #![doc = include_str!("../README.md")]
-#![no_std]
+#![cfg_attr(all(not(feature = "std"), target_os = "zkvm"), no_std)]
 #![allow(unused_variables)]
+#![feature(alloc_error_handler)]
 
 pub mod abi;
 pub mod memory;
 #[macro_use]
 pub mod syscall;
+#[cfg(target_os="zkvm")]
+mod bump_alloc;
+extern crate alloc;
+
+#[cfg(target_os = "zkvm")]
+use core::arch::asm;
 
 pub const WORD_SIZE: usize = core::mem::size_of::<u32>();
 pub const PAGE_SIZE: usize = 1024;
@@ -31,3 +38,40 @@ pub mod fileno {
     pub const STDERR: u32 = 2;
     pub const JOURNAL: u32 = 3;
 }
+
+#[allow(dead_code)]
+fn _fault() -> ! {
+    #[cfg(target_os = "zkvm")]
+    unsafe {
+        asm!("sw x0, 1(x0)")
+    };
+    unreachable!();
+}
+
+#[allow(dead_code)]
+fn abort(msg: &str) -> ! {
+    unsafe {
+        syscall::sys_panic(msg.as_ptr(), msg.len());
+    }
+
+    // As a fallback for non-compliant hosts, issue an illegal instruction.
+    #[allow(unreachable_code)]
+    _fault()
+}
+
+#[cfg(all(not(feature = "std"), target_os = "zkvm"))]
+mod handlers {
+    use core::{alloc::Layout, panic::PanicInfo};
+
+    #[panic_handler]
+    fn panic_fault(panic_info: &PanicInfo) -> ! {
+        let msg = ::alloc::format!("{}", panic_info);
+        crate::abort(&msg)
+    }
+
+    #[alloc_error_handler]
+    fn alloc_fault(_layout: Layout) -> ! {
+        crate::abort("Memory allocation failure")
+    }
+}
+
