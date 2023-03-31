@@ -79,7 +79,8 @@ impl<S: Sha256> RngCore for ShaRng<S> {
     }
 
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Error> {
-        Ok(self.fill_bytes(dest))
+        self.fill_bytes(dest);
+        Ok(())
     }
 }
 
@@ -116,7 +117,7 @@ pub mod testutil {
             x.next_u32();
         }
         assert_eq!(x.next_u32(), 785921476);
-        x.inner_mix(&*S::hash_bytes(b"foo"));
+        x.inner_mix(&S::hash_bytes(b"foo"));
         assert_eq!(x.next_u32(), 4167871101);
     }
 }

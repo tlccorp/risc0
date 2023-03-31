@@ -25,6 +25,12 @@ pub struct WriteIOP<F: Field, R: ConfigRng<F>> {
     phantom: PhantomData<F>,
 }
 
+impl<F: Field, R: ConfigRng<F>> Default for WriteIOP<F, R> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<F: Field, R: ConfigRng<F>> WriteIOP<F, R> {
     /// Create a new empty proof
     pub fn new() -> Self {

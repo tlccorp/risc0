@@ -96,7 +96,7 @@ fn read_image_id(verbose: u8, elf_file: &Path, image_id_file: Option<&Path>) -> 
 }
 
 fn run_prover(elf_contents: &[u8], opts: ProverOpts) -> Result<Receipt> {
-    let mut prover = Prover::new_with_opts(&elf_contents, opts).unwrap();
+    let mut prover = Prover::new_with_opts(elf_contents, opts).unwrap();
     let receipt = prover.run()?;
 
     Ok(receipt)
@@ -136,12 +136,7 @@ fn main() {
         // generate an actual proof.
         Digest::from([0; DIGEST_WORDS])
     } else {
-        read_image_id(
-            args.verbose,
-            &args.elf,
-            args.image_id.as_ref().map(|p| p.as_path()),
-        )
-        .unwrap_or_else(|| {
+        read_image_id(args.verbose, &args.elf, args.image_id.as_deref()).unwrap_or_else(|| {
             if args.verbose > 0 {
                 eprintln!("Computing image id");
             }
@@ -149,7 +144,7 @@ fn main() {
             let image = MemoryImage::new(&program, PAGE_SIZE as u32);
             let image_id = image.get_root();
             if let Some(image_id_file) = args.image_id.as_ref() {
-                std::fs::write(&image_id_file, image_id.as_bytes()).unwrap();
+                std::fs::write(image_id_file, image_id.as_bytes()).unwrap();
                 if args.verbose > 0 {
                     eprintln!("Saved image id to {}", image_id_file.display());
                 }
@@ -190,7 +185,7 @@ fn main() {
     if let Some(ref mut profiler) = guest_prof.as_mut() {
         profiler.finalize();
         let report = profiler.encode_to_vec();
-        fs::write(args.pprof_out.as_ref().unwrap(), &report)
+        fs::write(args.pprof_out.as_ref().unwrap(), report)
             .expect("Unable to write profiling output");
     }
     let receipt = proof.expect("Run failed");
@@ -200,11 +195,9 @@ fn main() {
         if args.verbose > 0 {
             eprintln!("Skipping seal generation.");
         }
-    } else {
-        if args.verbose > 0 {
-            eprintln!("Verifying that we executed correctly.");
-            receipt.verify(&image_id).unwrap();
-        }
+    } else if args.verbose > 0 {
+        eprintln!("Verifying that we executed correctly.");
+        receipt.verify(&image_id).unwrap();
     }
 
     if let Some(receipt_file) = args.receipt.as_ref() {

@@ -233,7 +233,7 @@ impl<'a> Syscall for PosixIo<'a> {
             let mut read_fds = self.read_fds.borrow_mut();
             let reader = read_fds
                 .get_mut(&fd)
-                .expect(&format!("Bad read file descriptor {fd}"));
+                .unwrap_or_else(|| panic!("Bad read file descriptor {fd}"));
 
             let navail = reader.fill_buf().unwrap().len() as u32;
             Ok((navail, 0))
@@ -251,7 +251,7 @@ impl<'a> Syscall for PosixIo<'a> {
             let mut read_fds = self.read_fds.borrow_mut();
             let reader = read_fds
                 .get_mut(&fd)
-                .expect(&format!("Bad read file descriptor {fd}"));
+                .unwrap_or_else(|| panic!("Bad read file descriptor {fd}"));
             // So that we don't have to deal with short reads, keep
             // reading until we get EOF or fill the buffer.
             let mut read_all = |mut buf: &mut [u8]| -> usize {
@@ -302,7 +302,7 @@ impl<'a> Syscall for PosixIo<'a> {
             let mut write_fds = self.write_fds.borrow_mut();
             let writer = write_fds
                 .get_mut(&fd)
-                .expect(&format!("Bad write file descriptor {fd}"));
+                .unwrap_or_else(|| panic!("Bad write file descriptor {fd}"));
 
             log::debug!("Writing {buf_len} bytes to file descriptor {fd}");
 

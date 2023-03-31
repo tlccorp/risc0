@@ -30,10 +30,10 @@ where
 
     fn next(&mut self) -> Option<u32> {
         let mut word_bytes: [u8; WORD_SIZE] = [0; WORD_SIZE];
-        for i in 0..WORD_SIZE {
+        for (i, elm) in word_bytes.iter_mut().enumerate().take(WORD_SIZE) {
             match self.iter.next() {
                 Some(val) => {
-                    word_bytes[i] = val;
+                    *elm = val;
                 }
                 None => {
                     if i == 0 {

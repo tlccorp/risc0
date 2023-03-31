@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// TODO: add # Safety docs to each unsafe func here
+#![allow(clippy::missing_safety_doc)]
+
 #[cfg(target_os = "zkvm")]
 use core::arch::asm;
 use core::{cmp::min, ptr::null_mut};
@@ -360,7 +363,7 @@ pub unsafe extern "C" fn sys_read(fd: u32, recv_buf: *mut u8, nrequested: usize)
         debug_assert!(nfill < 4, "nfill={nfill}");
         for _ in 0..nfill {
             *ptr = (word & 0xFF) as u8;
-            word = word >> 8;
+            word >>= 8;
             ptr = ptr.add(1);
         }
         ptr
@@ -403,7 +406,7 @@ pub unsafe extern "C" fn sys_read(fd: u32, recv_buf: *mut u8, nrequested: usize)
     debug_assert_eq!(nread_main as usize, main_requested);
 
     // Copy in individual bytes after the word-aligned section.
-    let unaligned_at_end = (main_requested as usize) % WORD_SIZE;
+    let unaligned_at_end = main_requested % WORD_SIZE;
     fill_from_word(
         main_ptr.add(main_words * WORD_SIZE),
         lastword,

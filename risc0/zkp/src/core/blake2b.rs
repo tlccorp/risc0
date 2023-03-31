@@ -75,7 +75,7 @@ impl<T: Blake2b> ConfigHash<BabyBear> for ConfigHashBlake2b<T> {
     type DigestPtr = Box<Digest>;
 
     fn hash_pair(a: &Digest, b: &Digest) -> Self::DigestPtr {
-        let concat = [a.as_bytes().as_ref(), b.as_bytes()].concat();
+        let concat = [a.as_bytes(), b.as_bytes()].concat();
         Box::new(Digest::from(T::blake2b(concat)))
     }
 
@@ -137,7 +137,7 @@ impl<T: Blake2b> RngCore for Blake2bRng<T> {
         ((next[0] as u32) << 24)
             + ((next[1] as u32) << 16)
             + ((next[2] as u32) << 8)
-            + ((next[3] as u32) << 0)
+            + (next[3] as u32)
     }
 
     fn next_u64(&mut self) -> u64 {
@@ -149,6 +149,7 @@ impl<T: Blake2b> RngCore for Blake2bRng<T> {
     }
 
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Error> {
-        Ok(self.fill_bytes(dest))
+        self.fill_bytes(dest);
+        Ok(())
     }
 }

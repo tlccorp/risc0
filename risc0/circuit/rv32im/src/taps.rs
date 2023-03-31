@@ -16,7 +16,7 @@
 
 use risc0_zkp::taps::{TapData, TapSet};
 
-pub(crate) const TAPSET: &'static TapSet = &TapSet::<'static> {
+pub(crate) const TAPSET: &TapSet = &TapSet {
     taps: &[
         TapData {
             offset: 0,

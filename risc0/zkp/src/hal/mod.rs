@@ -94,6 +94,7 @@ pub trait Hal {
 
     fn zk_shift(&self, io: &Self::BufferElem, count: usize);
 
+    #[allow(clippy::too_many_arguments)]
     fn mix_poly_coeffs(
         &self,
         out: &Self::BufferExtElem,
@@ -405,8 +406,8 @@ mod testutil {
         for count in COUNTS {
             let input = hal_gpu.alloc_elem("input", count);
             input.view_mut(|a| {
-                for i in 0..count {
-                    a[i] = H::Elem::random(&mut rng);
+                for elm in a.iter_mut().take(count) {
+                    *elm = H::Elem::random(&mut rng);
                 }
             });
             let output = hal_gpu.alloc_elem("output", count);

@@ -36,7 +36,7 @@ pub fn ser_test() {
     };
 
     let b = serialize(&a).unwrap();
-    let des = MyStruct::deserialize_from(&*b);
+    let des = MyStruct::deserialize_from(&b);
     let mys: MyStruct = MyStruct::from_ref(&des);
     assert_eq!(a, mys);
 }
@@ -54,7 +54,7 @@ pub fn ser_test_link() {
     };
 
     let b = serialize(&a).unwrap();
-    let des = MyStruct::deserialize_from(&*b);
+    let des = MyStruct::deserialize_from(&b);
     let mys: MyStruct = MyStruct::from_ref(&des);
     assert_eq!(a, mys);
 }

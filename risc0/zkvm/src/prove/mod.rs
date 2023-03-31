@@ -254,7 +254,7 @@ impl<'a> ProverOpts<'a> {
         mut self,
         callback: impl FnMut(TraceEvent) -> Result<()> + 'a,
     ) -> Self {
-        assert!(!self.trace_callback.is_some(), "Duplicate trace callback");
+        assert!(self.trace_callback.is_none(), "Duplicate trace callback");
         self.trace_callback = Some(Box::new(callback));
         self
     }
@@ -314,7 +314,7 @@ impl Syscall for DefaultSyscall {
             if syscall == SYS_PANIC.as_str() {
                 bail!("Guest panicked: {msg}");
             } else if syscall == SYS_LOG.as_str() {
-                println!("R0VM[{}] {}", ctx.get_cycle(), msg);
+                println!("R0VM[{}] {msg}", ctx.get_cycle());
             } else {
                 unreachable!()
             }
@@ -430,7 +430,7 @@ impl<'a> Prover<'a> {
     ///
     /// This will return an `Err` if `elf` is not a valid ELF file.
     pub fn new_with_opts(elf: &[u8], opts: ProverOpts<'a>) -> Result<Self> {
-        let program = Program::load_elf(&elf, MEM_SIZE as u32)?;
+        let program = Program::load_elf(elf, MEM_SIZE as u32)?;
         Ok(Prover {
             inner: ProverImpl::new(opts),
             image: Rc::new(RefCell::new(MemoryImage::new(&program, PAGE_SIZE as u32))),

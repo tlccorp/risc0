@@ -143,7 +143,7 @@ impl<'a> Preflight<'a> {
                 "pc=0x{:08x}: inst=0x{:08x} {}",
                 outputter.insn_pc,
                 inst,
-                desc.as_ref().map(String::as_str).unwrap_or("(unknown)")
+                desc.as_deref().unwrap_or("(unknown)")
             );
         }
         InstructionExecutor {
@@ -206,8 +206,8 @@ impl<'a> Preflight<'a> {
 
                 for _ in 0..count {
                     let mut block = [0u32; DIGEST_WORDS * 2];
-                    for i in 0..DIGEST_WORDS {
-                        block[i] = self.mem.load_u32(block1_ptr + (i * WORD_SIZE) as u32);
+                    for (i, elm) in block.iter_mut().enumerate().take(DIGEST_WORDS) {
+                        *elm = self.mem.load_u32(block1_ptr + (i * WORD_SIZE) as u32);
                         //.to_be();
                     }
                     for i in 0..DIGEST_WORDS {

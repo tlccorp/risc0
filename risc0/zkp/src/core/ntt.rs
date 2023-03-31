@@ -275,8 +275,8 @@ where
         _ => unreachable!(),
     }
     let norm = B::from_u64(size as u64).inv();
-    for i in 0..size {
-        io[i] = io[i] * norm;
+    for io_elm in io.iter_mut().take(size) {
+        *io_elm = *io_elm * norm;
     }
 }
 
@@ -362,15 +362,15 @@ mod tests {
         let mut goal = [BabyBearElem::ZERO; SIZE];
         // Compute polynomial at each ROU power (starting at 0, i.e. x = 1)
         let mut x = BabyBearElem::ONE;
-        for i in 0..SIZE {
+        for goal_elm in goal.iter_mut().take(SIZE) {
             // Compute the polynomial
             let mut tot = BabyBearElem::ZERO;
             let mut xn = BabyBearElem::ONE;
-            for j in 0..SIZE {
-                tot += buf[j] * xn;
+            for elm in buf.iter().take(SIZE) {
+                tot += *elm * xn;
                 xn *= x;
             }
-            goal[i] = tot;
+            *goal_elm = tot;
             x *= BabyBearElem::ROU_FWD[N];
         }
         // Now compute multiEvaluate in place
@@ -389,7 +389,7 @@ mod tests {
         let mut rng = thread_rng();
         let mut buf = [BabyBearElem::random(&mut rng); SIZE];
         // Copy it
-        let orig = buf.clone();
+        let orig = buf;
         // Now go backwards
         interpolate_ntt::<BabyBearElem, BabyBearElem>(&mut buf);
         // Make sure something changed
@@ -409,7 +409,7 @@ mod tests {
         let mut rng = thread_rng();
         let mut buf = [GoldilocksElem::random(&mut rng); SIZE];
         // Copy it
-        let orig = buf.clone();
+        let orig = buf;
         // Now go backwards
         interpolate_ntt::<GoldilocksElem, GoldilocksElem>(&mut buf);
         // Make sure something changed
@@ -441,15 +441,15 @@ mod tests {
         let mut goal = [BabyBearElem::ZERO; SIZE_OUT];
         // Compute polynomial at each ROU power (starting at 0, i.e. x = 1)
         let mut x = BabyBearElem::ONE;
-        for i in 0..SIZE_OUT {
+        for goal_elm in goal.iter_mut().take(SIZE_OUT) {
             // Compute the polynomial
             let mut tot = BabyBearElem::ZERO;
             let mut xn = BabyBearElem::ONE;
-            for j in 0..SIZE_IN {
-                tot += cmp[j] * xn;
+            for elm in cmp.iter_mut().take(SIZE_IN) {
+                tot += *elm * xn;
                 xn *= x;
             }
-            goal[i] = tot;
+            *goal_elm = tot;
             x *= BabyBearElem::ROU_FWD[N];
         }
         assert_eq!(goal, buf);

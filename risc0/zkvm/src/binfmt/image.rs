@@ -122,18 +122,16 @@ impl MemoryImage {
         for (addr, data) in program.image.iter() {
             let addr = *addr as usize;
             let bytes = data.to_le_bytes();
-            for i in 0..WORD_SIZE {
-                image[addr + i] = bytes[i];
-            }
+            image[addr..(WORD_SIZE + addr)].copy_from_slice(&bytes[..WORD_SIZE]);
         }
 
         // Compute the page table hashes except for the very last root hash.
         let info = PageTableInfo::new(PAGE_TABLE.start() as u32, page_size);
         for i in 0..info.num_pages {
-            let page_addr = info.get_page_addr(i as u32);
+            let page_addr = info.get_page_addr(i);
             let page = &image[page_addr as usize..page_addr as usize + page_size as usize];
             let digest = hash_page(page);
-            let entry_addr = info.get_page_entry_addr(i as u32);
+            let entry_addr = info.get_page_entry_addr(i);
             image[entry_addr as usize..entry_addr as usize + DIGEST_BYTES]
                 .copy_from_slice(digest.as_bytes());
         }

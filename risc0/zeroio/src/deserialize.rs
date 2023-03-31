@@ -94,7 +94,7 @@ impl<'a, T: Deserialize<'a>> Deserialize<'a> for Option<T> {
     }
 
     fn from_ref(val: &Self::RefType) -> Self {
-        val.as_ref().map(|v| T::from_ref(&v))
+        val.as_ref().map(|v| T::from_ref(v))
     }
 }
 
@@ -108,7 +108,7 @@ impl<'a, T: Deserialize<'a>> Deserialize<'a> for Box<T> {
     }
 
     fn from_ref(val: &Self::RefType) -> Self {
-        Box::new(T::from_ref(&val))
+        Box::new(T::from_ref(val))
     }
 }
 
@@ -121,6 +121,10 @@ pub struct VecRef<'a, T> {
 impl<'a, T: Deserialize<'a>> VecRef<'a, T> {
     pub fn len(&self) -> usize {
         self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
     }
 
     pub fn index(&self, index: usize) -> T::RefType {
@@ -257,11 +261,7 @@ impl<'a> Deserialize<'a> for () {
     type RefType = ();
     const FIXED_WORDS: usize = 0;
 
-    fn deserialize_from(_words: &'a [u32]) -> Self::RefType {
-        ()
-    }
+    fn deserialize_from(_words: &'a [u32]) -> Self::RefType {}
 
-    fn from_ref(_val: &Self::RefType) -> Self {
-        ()
-    }
+    fn from_ref(_val: &Self::RefType) -> Self {}
 }

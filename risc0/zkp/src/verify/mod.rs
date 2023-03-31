@@ -104,6 +104,7 @@ pub trait VerifyHal {
     fn poly_eval(&self, coeffs: &[Self::ExtElem], x: Self::ExtElem) -> Self::ExtElem;
 
     // Compute the FRI verify taps sum.
+    #[allow(clippy::too_many_arguments)]
     fn fri_eval_taps(
         &self,
         taps: &TapSet<'static>,
@@ -173,8 +174,8 @@ mod host {
         fn poly_eval(&self, coeffs: &[Self::ExtElem], x: Self::ExtElem) -> Self::ExtElem {
             let mut mul_x = Self::ExtElem::ONE;
             let mut tot = Self::ExtElem::ZERO;
-            for i in 0..coeffs.len() {
-                tot += coeffs[i] * mul_x;
+            for coeff in coeffs {
+                tot += *coeff * mul_x;
                 mul_x *= x;
             }
             tot
@@ -240,7 +241,7 @@ mod host {
             let tap_cache = tap_cache.as_ref().unwrap();
 
             for (reg, cur) in zip(taps.regs(), tap_cache.tap_mix_pows.iter()) {
-                tot[reg.combo_id()] += *cur * rows[reg.group() as usize][reg.offset()];
+                tot[reg.combo_id()] += *cur * rows[reg.group()][reg.offset()];
             }
             for (i, cur) in zip(0..Self::CHECK_SIZE, tap_cache.check_mix_pows.iter()) {
                 tot[combo_count] += *cur * check_row[i];
@@ -281,7 +282,7 @@ where
     CheckCode: Fn(u32, &Digest) -> Result<(), VerificationError>,
     CheckGlobals: Fn(&[H::Elem]) -> Result<(), VerificationError>,
 {
-    if seal.len() == 0 {
+    if seal.is_empty() {
         return Err(VerificationError::ReceiptFormatError);
     }
 
@@ -295,7 +296,7 @@ where
     adapter.execute(&mut iop);
 
     let io = adapter.out.ok_or(VerificationError::ReceiptFormatError)?;
-    check_globals(&io)?;
+    check_globals(io)?;
 
     // Get the size
     let po2 = adapter.po2();
@@ -380,7 +381,7 @@ where
     let result = hal.compute_polynomial(
         &eval_u,
         poly_mix,
-        bytemuck::cast_slice(&adapter.out.unwrap()),
+        bytemuck::cast_slice(adapter.out.unwrap()),
         bytemuck::cast_slice(&adapter.mix),
     );
     hal.debug("< compute_polynomial");
@@ -396,11 +397,10 @@ where
     let remap = [0, 2, 1, 3];
     let fp0 = H::Elem::ZERO;
     let fp1 = H::Elem::ONE;
-    for i in 0..4 {
-        let rmi = remap[i];
-        check += coeff_u[num_taps + rmi + 0]
-            * z.pow(i)
-            * H::ExtElem::from_subelems([fp1, fp0, fp0, fp0]);
+    for (i, elm) in remap.iter().enumerate() {
+        let rmi = *elm;
+        check +=
+            coeff_u[num_taps + rmi] * z.pow(i) * H::ExtElem::from_subelems([fp1, fp0, fp0, fp0]);
         check += coeff_u[num_taps + rmi + 4]
             * z.pow(i)
             * H::ExtElem::from_subelems([fp0, fp1, fp0, fp0]);

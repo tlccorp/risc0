@@ -44,12 +44,12 @@ fn sbox(x: Elem) -> Elem {
     let x2 = x * x;
     let x4 = x2 * x2;
     let x6 = x4 * x2;
-    return x6 * x;
+    x6 * x
 }
 
 fn do_full_sboxes(cells: &mut [Elem; CELLS]) {
-    for i in 0..CELLS {
-        cells[i] = sbox(cells[i]);
+    for cell in cells.iter_mut().take(CELLS) {
+        *cell = sbox(*cell);
     }
 }
 
@@ -189,8 +189,8 @@ mod tests {
     #[test]
     fn poseidon_test_vectors() {
         let mut buf = [Elem::new(0); CELLS];
-        for i in 0..CELLS_RATE {
-            buf[i] = Elem::new(i as u32);
+        for (i, elm) in buf.iter_mut().enumerate().take(CELLS_RATE) {
+            *elm = Elem::new(i as u32);
         }
         log::debug!("input: {:?}", buf);
         poseidon_mix(&mut buf);

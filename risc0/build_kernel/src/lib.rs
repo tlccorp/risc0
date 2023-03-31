@@ -145,7 +145,7 @@ impl KernelBuild {
             |_out_dir, out_path, sys_inc_dir| {
                 let mut cmd = Command::new("nvcc");
                 cmd.arg("--fatbin");
-                cmd.arg("-o").arg(&out_path);
+                cmd.arg("-o").arg(out_path);
                 cmd.args(self.files.iter());
                 cmd.arg("-I").arg(sys_inc_dir);
                 for inc_dir in self.inc_dirs.iter() {
@@ -155,7 +155,7 @@ impl KernelBuild {
                     .status()
                     .expect("Failed to run 'nvcc', do you have the CUDA toolkit installed?");
                 if !status.success() {
-                    panic!("Failed to build CUDA kernel: {}", output);
+                    panic!("Failed to build CUDA kernel: {output}");
                 }
             },
         );
@@ -169,7 +169,7 @@ impl KernelBuild {
             |out_dir, out_path, sys_inc_dir| {
                 let mut air_paths = vec![];
                 for src in self.files.iter() {
-                    let out_path = out_dir.join(&src).with_extension("").with_extension("air");
+                    let out_path = out_dir.join(src).with_extension("").with_extension("air");
                     if let Some(parent) = out_path.parent() {
                         fs::create_dir_all(parent).unwrap();
                     }
@@ -182,7 +182,7 @@ impl KernelBuild {
                     for inc_dir in self.inc_dirs.iter() {
                         cmd.arg("-I").arg(inc_dir);
                     }
-                    println!("Running: {:?}", cmd);
+                    println!("Running: {cmd:?}");
                     let status = cmd.status().unwrap();
                     if !status.success() {
                         panic!("Could not build metal kernels");
@@ -195,7 +195,7 @@ impl KernelBuild {
                     .arg("metallib")
                     .args(air_paths)
                     .arg("-o")
-                    .arg(&out_path)
+                    .arg(out_path)
                     .status()
                     .unwrap();
                 if !result.success() {
@@ -247,7 +247,7 @@ impl KernelBuild {
         }
         fs::copy(cache_path, &out_path).unwrap();
 
-        println!("cargo:{}={}", output, out_path.display());
+        println!("cargo:{output}={}", out_path.display());
     }
 }
 
