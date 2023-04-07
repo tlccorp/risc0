@@ -153,6 +153,45 @@ fn run_do_nothing(opts: ProverOpts) -> Result<Receipt> {
 
 #[test]
 #[cfg_attr(feature = "cuda", serial)]
+fn receipt_journal_seal() {
+    let mut prover = Prover::new(MULTI_TEST_ELF).unwrap();
+    let msg = "hello world";
+    prover.add_input_u32_slice(&to_vec(&MultiTestSpec::ShaDigest { data: msg.into() }).unwrap());
+    let receipt = prover.run().unwrap();
+    let journal = receipt.get_journal_bytes();
+    assert_eq!(
+        journal,
+        &hex::decode("b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9").unwrap()
+    );
+    // TODO: Validate Global::decode?
+    assert_eq!(receipt.get_seal_bytes().len(), 212968);
+}
+
+#[test]
+#[cfg_attr(feature = "cuda", serial)]
+fn receipt_pre_post_img() {
+    let mut prover = Prover::new_with_opts(MULTI_TEST_ELF, ProverOpts::default()).unwrap();
+    prover.add_input_u32_slice(&to_vec(&MultiTestSpec::DoNothing).unwrap());
+    let receipt = prover.run().unwrap();
+    let (pre_img, post_img) = receipt.get_image_ids();
+    assert_eq!(pre_img, MULTI_TEST_ID.into());
+    assert_eq!(
+        post_img,
+        Digest::from([
+            0xfdb0f0cb_u32.to_be(),
+            0xedd44dee_u32.to_be(),
+            0x3c29ce83_u32.to_be(),
+            0x5628f4c9_u32.to_be(),
+            0x1a816064_u32.to_be(),
+            0xca249736_u32.to_be(),
+            0xfc12ed71_u32.to_be(),
+            0x1468370a_u32.to_be(),
+        ])
+    )
+}
+
+#[test]
+#[cfg_attr(feature = "cuda", serial)]
 fn receipt_serde_with_seal() {
     let receipt = run_do_nothing(ProverOpts::default()).unwrap();
     let ser: Vec<u32> = crate::serde::to_vec(&receipt).unwrap();

@@ -83,12 +83,23 @@ use anyhow::{anyhow, Result};
 use hex::FromHex;
 use risc0_circuit_rv32im::layout;
 #[cfg(not(target_os = "zkvm"))]
+use risc0_circuit_rv32im::CircuitImpl;
+#[cfg(not(target_os = "zkvm"))]
 use risc0_core::field::baby_bear::BabyBear;
 use risc0_core::field::baby_bear::BabyBearElem;
 use risc0_zeroio::{Deserialize as ZeroioDeserialize, Serialize as ZeroioSerialize};
 #[cfg(not(target_os = "zkvm"))]
-use risc0_zkp::core::hash::{sha::Sha256HashSuite, HashSuite};
-use risc0_zkp::{core::digest::Digest, layout::Buffer, verify::VerificationError, MIN_CYCLES_PO2};
+use risc0_zkp::{
+    adapter::CircuitInfo,
+    core::hash::{sha::Sha256HashSuite, HashSuite},
+    verify::{read_iop::ReadIOP, CpuVerifyHal},
+};
+use risc0_zkp::{
+    core::digest::Digest,
+    layout::Buffer,
+    verify::{VerificationError, VerifyHal},
+    MIN_CYCLES_PO2,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -170,7 +181,7 @@ pub struct Receipt {
 /// (HAL) to be used for verification with the `hal` parameter.
 pub fn verify_with_hal<'a, H, D>(hal: &H, image_id: D, seal: &[u32], journal: &[u8]) -> Result<()>
 where
-    H: risc0_zkp::verify::VerifyHal<Elem = BabyBearElem>,
+    H: VerifyHal<Elem = BabyBearElem>,
     H::HashFn: ControlId,
     &'a Digest: From<D>,
 {
@@ -244,7 +255,6 @@ impl Receipt {
         }
     }
 
-    #[cfg(not(target_os = "zkvm"))]
     /// Verifies a SHA-256 receipt using CPU
     ///
     /// Verifies that this receipt was constructed by running code whose ImageID
@@ -254,6 +264,7 @@ impl Receipt {
     ///
     /// This runs the verification on the CPU and is for receipts using SHA-256
     /// as their hash function.
+    #[cfg(not(target_os = "zkvm"))]
     pub fn verify<'a, D>(&self, image_id: D) -> Result<()>
     where
         &'a Digest: From<D>,
@@ -277,7 +288,7 @@ impl Receipt {
         HS::HashFn: ControlId,
         &'a Digest: From<D>,
     {
-        let hal = risc0_zkp::verify::CpuVerifyHal::<BabyBear, HS, _>::new(&crate::CIRCUIT);
+        let hal = CpuVerifyHal::<BabyBear, HS, _>::new(&crate::CIRCUIT);
 
         self.verify_with_hal(&hal, image_id)
     }
@@ -295,7 +306,7 @@ impl Receipt {
     /// associated with that HAL.
     pub fn verify_with_hal<'a, H, D>(&self, hal: &H, image_id: D) -> Result<()>
     where
-        H: risc0_zkp::verify::VerifyHal<Elem = BabyBearElem>,
+        H: VerifyHal<Elem = BabyBearElem>,
         H::HashFn: ControlId,
         &'a Digest: From<D>,
     {
@@ -311,6 +322,21 @@ impl Receipt {
     pub fn get_seal_bytes(&self) -> &[u8] {
         bytemuck::cast_slice(self.seal.as_slice())
     }
+
+    /// Return Pre / Post image_id from [Receipt] seals.
+    #[cfg(not(target_os = "zkvm"))]
+    pub fn get_image_ids(&self) -> (Digest, Digest) {
+        // NOTE: if https://github.com/rust-lang/rust/issues/8995 ever lands
+        // we could define these type alias's at the 'impl Receipt' level
+        type F = BabyBear;
+        type HS = Sha256HashSuite<F, crate::sha::Impl>;
+        type H = CpuVerifyHal<'static, F, HS, CircuitImpl>;
+
+        let mut iop = ReadIOP::<<H as VerifyHal>::Field, <H as VerifyHal>::Rng>::new(&self.seal);
+        let elms = iop.read_field_elem_slice(CircuitImpl::OUTPUT_SIZE);
+        let global = Global::decode(layout::OutBuffer(elms)).expect("Failed to decode Globals");
+        (global.pre.image_id, global.post.image_id)
+    }
 }
 
 #[derive(Debug)]
@@ -320,9 +346,10 @@ struct SystemState {
 }
 
 #[derive(Debug)]
+#[cfg_attr(target_os = "zkvm", allow(dead_code))]
 struct Global {
     pre: SystemState,
-    _post: SystemState,
+    post: SystemState,
     _check_dirty: u32,
     output: Digest,
 }
@@ -349,7 +376,7 @@ impl Global {
     fn decode(io: layout::OutBuffer) -> Result<Self, VerificationError> {
         let body = layout::LAYOUT.mux.body;
         let pre = SystemState::decode(io, body.pre)?;
-        let _post = SystemState::decode(io, body.post)?;
+        let post = SystemState::decode(io, body.post)?;
         let bytes: Vec<u8> = io
             .tree(body.output)
             .get_bytes()
@@ -359,7 +386,7 @@ impl Global {
 
         Ok(Self {
             pre,
-            _post,
+            post,
             _check_dirty,
             output,
         })
