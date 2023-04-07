@@ -680,6 +680,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctor"
+version = "0.1.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d2301688392eb071b0bf1a37be05c469d3cc4dbbd95df672fe28ab021e6a096"
+dependencies = [
+ "quote 1.0.26",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "cuda-config"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2916,27 +2926,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "risc0-zeroio"
-version = "0.14.0"
-dependencies = [
- "bytemuck",
- "impl-trait-for-tuples",
- "log",
- "risc0-zeroio-derive",
- "risc0-zkvm-platform",
- "tracing",
-]
-
-[[package]]
-name = "risc0-zeroio-derive"
-version = "0.14.0"
-dependencies = [
- "proc-macro2",
- "quote 1.0.26",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "risc0-zkp"
 version = "0.14.0"
 dependencies = [
@@ -2956,7 +2945,6 @@ dependencies = [
  "rayon",
  "risc0-core",
  "risc0-sys",
- "risc0-zeroio",
  "risc0-zkvm-platform",
  "rustacuda_core",
  "rustacuda_derive",
@@ -2984,7 +2972,6 @@ dependencies = [
  "rayon",
  "risc0-circuit-rv32im",
  "risc0-core",
- "risc0-zeroio",
  "risc0-zkp",
  "risc0-zkvm-platform",
  "rrs-lib",
@@ -3953,6 +3940,36 @@ dependencies = [
  "lazy_static",
  "tempfile",
  "termcolor",
+]
+
+[[package]]
+name = "voting-machine"
+version = "0.12.0"
+dependencies = [
+ "clap 4.2.1",
+ "ctor",
+ "env_logger 0.9.3",
+ "hex",
+ "log",
+ "risc0-zkvm",
+ "serde",
+ "voting-machine-core",
+ "voting-machine-methods",
+]
+
+[[package]]
+name = "voting-machine-core"
+version = "0.12.0"
+dependencies = [
+ "risc0-zkp",
+ "serde",
+]
+
+[[package]]
+name = "voting-machine-methods"
+version = "0.12.0"
+dependencies = [
+ "risc0-build",
 ]
 
 [[package]]

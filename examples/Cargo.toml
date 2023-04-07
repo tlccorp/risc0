@@ -12,6 +12,8 @@ members = [
     "password-checker",
     "password-checker/core",
     "sha",
+    "voting-machine",
+    "voting-machine/core",
     "waldo",
     "waldo/core",
     "wordle",
